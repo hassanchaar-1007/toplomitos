@@ -1,0 +1,4470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1d3557">
+<title>Top Lomitos - Sistema de Gestión</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+--primary:#e63946;--primary-dark:#c1121f;--primary-light:#ffd6d9;
+--secondary:#f4a261;--secondary-dark:#e76f51;
+--dark:#1d3557;--dark2:#457b9d;
+--light:#f1faee;--white:#fff;--gray:#e9ecef;--gray2:#adb5bd;--gray3:#6c757d;
+--success:#2d6a4f;--success-light:#d8f3dc;
+--warning:#e9c46a;--warning-dark:#f4a261;
+--danger:#e63946;--danger-light:#ffd6d9;
+--shadow:0 2px 12px rgba(0,0,0,.08);--shadow-lg:0 8px 30px rgba(0,0,0,.12);
+--radius:12px;--radius-sm:8px;
+--bottom-nav:64px;
+}
+body{font-family:'Inter',sans-serif;background:#f8f9fa;color:#333;min-height:100vh;overflow-x:hidden}
+.app{min-height:100vh;display:flex;flex-direction:column}
+.login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--dark) 0%,var(--dark2) 100%);padding:20px}
+.login-card{background:var(--white);border-radius:20px;padding:40px 30px;width:100%;max-width:420px;box-shadow:var(--shadow-lg);text-align:center}
+.login-logo{font-size:2rem;font-weight:800;color:var(--primary);margin-bottom:4px}
+.login-sub{color:var(--gray3);font-size:.85rem;margin-bottom:24px}
+.login-input{width:100%;padding:14px 16px;border:2px solid var(--gray);border-radius:var(--radius-sm);font-size:1rem;font-family:inherit;margin-bottom:12px;transition:.2s;-webkit-appearance:none}
+.login-input:focus{outline:none;border-color:var(--primary)}
+.login-btn{width:100%;padding:14px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius-sm);font-size:1rem;font-weight:600;cursor:pointer;transition:.2s;font-family:inherit}
+.login-btn:hover{background:var(--primary-dark)}
+.role-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px}
+.role-btn{padding:12px 6px;border:2px solid var(--gray);border-radius:var(--radius-sm);background:var(--white);cursor:pointer;transition:.2s;font-family:inherit;text-align:center}
+.role-btn:hover,.role-btn:active{border-color:var(--primary);background:var(--primary-light)}
+.role-btn.active{border-color:var(--primary);background:var(--primary-light);color:var(--primary)}
+.role-btn .role-icon{font-size:1.5rem;margin-bottom:2px}
+.role-btn .role-name{font-size:.7rem;font-weight:600}
+.navbar{background:var(--dark);color:#fff;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100}
+.nav-brand{font-weight:800;font-size:1.1rem;color:var(--secondary)}
+.nav-info{display:flex;align-items:center;gap:10px;font-size:.8rem}
+.nav-role{background:rgba(255,255,255,.15);padding:3px 10px;border-radius:20px;font-size:.7rem}
+.nav-time{color:var(--gray2);display:none}
+.nav-btn{background:rgba(255,255,255,.1);border:none;color:#fff;padding:8px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:.8rem;font-family:inherit;transition:.2s}
+.layout{display:flex;flex:1;min-height:calc(100vh - 52px)}
+.sidebar{width:200px;background:var(--white);border-right:1px solid var(--gray);padding:12px 0;flex-shrink:0;overflow-y:auto}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;font-size:.85rem;color:var(--gray3);transition:.15s;border-left:3px solid transparent}
+.sidebar-item:hover{background:var(--light);color:var(--dark)}
+.sidebar-item.active{background:var(--primary-light);color:var(--primary);border-left-color:var(--primary);font-weight:600}
+.sidebar-item .si-icon{font-size:1.1rem;width:22px;text-align:center}
+.main-content{flex:1;padding:20px;overflow-y:auto;max-height:calc(100vh - 52px)}
+.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:var(--bottom-nav);background:var(--white);border-top:1px solid var(--gray);z-index:100;box-shadow:0 -2px 10px rgba(0,0,0,.06)}
+.bottom-nav-inner{display:flex;justify-content:space-around;align-items:center;height:100%;padding:0 4px}
+.bnav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:4px 8px;border-radius:8px;transition:.15s;min-width:50px;position:relative}
+.bnav-item.active{color:var(--primary)}
+.bnav-item .bnav-icon{font-size:1.3rem;line-height:1}
+.bnav-item .bnav-label{font-size:.6rem;font-weight:600;margin-top:2px;color:var(--gray3)}
+.bnav-item.active .bnav-label{color:var(--primary)}
+.bnav-badge{position:absolute;top:0;right:2px;background:var(--primary);color:#fff;font-size:.6rem;font-weight:700;padding:1px 5px;border-radius:10px;min-width:16px;text-align:center}
+.card{background:var(--white);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+.card-title{font-size:1rem;font-weight:700;color:var(--dark)}
+.stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+.stat-card{background:var(--white);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+.stat-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.stat-icon.red{background:var(--primary-light);color:var(--primary)}
+.stat-icon.green{background:var(--success-light);color:var(--success)}
+.stat-icon.yellow{background:#fff3cd;color:#856404}
+.stat-icon.blue{background:#d0ecff;color:#0353a4}
+.stat-value{font-size:1.2rem;font-weight:800;color:var(--dark)}
+.stat-label{font-size:.7rem;color:var(--gray3)}
+.btn{padding:10px 16px;border:none;border-radius:var(--radius-sm);font-size:.85rem;font-weight:600;cursor:pointer;transition:.2s;font-family:inherit;display:inline-flex;align-items:center;gap:6px;-webkit-appearance:none}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover,.btn-primary:active{background:var(--primary-dark)}
+.btn-success{background:var(--success);color:#fff}
+.btn-warning{background:var(--secondary);color:#fff}
+.btn-outline{background:transparent;border:2px solid var(--gray);color:var(--gray3)}
+.btn-sm{padding:7px 12px;font-size:.78rem}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-block{width:100%;justify-content:center;padding:14px}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:.7rem;font-weight:600;color:var(--gray3);text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--gray);background:var(--light);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--gray);font-size:.82rem}
+tr:active{background:var(--light)}
+.badge{display:inline-block;padding:4px 10px;border-radius:20px;font-size:.7rem;font-weight:600;white-space:nowrap}
+.badge-pending{background:#fff3cd;color:#856404}
+.badge-preparing{background:#d0ecff;color:#0353a4}
+.badge-ready{background:var(--success-light);color:var(--success)}
+.badge-served{background:#e2d9f3;color:#5a3d8a}
+.badge-paid{background:var(--gray);color:var(--gray3)}
+.badge-awaiting_payment{background:#f8d7da;color:#842029}
+.badge-cancelled{background:var(--gray);color:var(--danger)}
+.menu-cats{display:flex;gap:6px;flex-wrap:nowrap;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none}
+.menu-cats::-webkit-scrollbar{display:none}
+.cat-btn{padding:8px 14px;border:2px solid var(--gray);border-radius:20px;background:var(--white);cursor:pointer;font-size:.78rem;font-weight:500;transition:.2s;font-family:inherit;white-space:nowrap;flex-shrink:0}
+.cat-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.menu-item{background:var(--white);border:2px solid var(--gray);border-radius:var(--radius-sm);padding:12px;cursor:pointer;transition:.15s;-webkit-user-select:none;user-select:none}
+.menu-item:active{border-color:var(--primary);background:var(--primary-light);transform:scale(.97)}
+.menu-item .mi-name{font-weight:600;font-size:.82rem;margin-bottom:2px;line-height:1.2}
+.menu-item .mi-price{color:var(--primary);font-weight:700;font-size:.95rem}
+.menu-item .mi-desc{color:var(--gray3);font-size:.7rem;margin-bottom:4px}
+.order-panel{position:fixed;right:0;top:52px;width:340px;height:calc(100vh - 52px);background:var(--white);border-left:2px solid var(--gray);display:flex;flex-direction:column;z-index:50;box-shadow:-4px 0 20px rgba(0,0,0,.08)}
+.order-header{padding:14px 16px;border-bottom:1px solid var(--gray);display:flex;justify-content:space-between;align-items:center}
+.order-items{flex:1;overflow-y:auto;padding:10px 16px;-webkit-overflow-scrolling:touch}
+.order-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--gray)}
+.oi-info{flex:1;min-width:0}
+.oi-name{font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.oi-price{color:var(--gray3);font-size:.75rem}
+.oi-qty{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.oi-qty button{width:32px;height:32px;border:1px solid var(--gray);border-radius:8px;background:var(--white);cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center}
+.order-footer{padding:14px 16px;border-top:2px solid var(--gray);background:var(--light)}
+.order-total{display:flex;justify-content:space-between;font-size:1.1rem;font-weight:800;margin-bottom:10px}
+.kitchen-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.kitchen-card{border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+.kitchen-card.pending{background:#fff8e1;border-left:4px solid var(--secondary)}
+.kitchen-card.preparing{background:#e3f2fd;border-left:4px solid #1976d2}
+.kitchen-card.ready{background:var(--success-light);border-left:4px solid var(--success)}
+.kc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.kc-order-num{font-weight:800;font-size:1rem}
+.kc-time{font-size:.75rem;color:var(--gray3)}
+.kc-type{font-size:.75rem;font-weight:600;padding:3px 8px;border-radius:10px;background:rgba(0,0,0,.08)}
+.kc-items{list-style:none;margin-bottom:10px}
+.kc-items li{padding:3px 0;font-size:.85rem;display:flex;justify-content:space-between}
+.kc-items .qty{font-weight:700;color:var(--primary);margin-right:6px}
+.clock-display{font-size:2.8rem;font-weight:800;color:var(--dark);text-align:center;margin:16px 0}
+.clock-date{text-align:center;color:var(--gray3);font-size:.9rem;margin-bottom:24px}
+.clock-btn-area{display:flex;justify-content:center;margin-bottom:24px}
+.clock-btn{width:160px;height:160px;border-radius:50%;border:none;font-size:1.2rem;font-weight:700;cursor:pointer;transition:.3s;display:flex;align-items:center;justify-content:center;flex-direction:column}
+.clock-btn.clock-in{background:linear-gradient(135deg,var(--success),#40916c);color:#fff;box-shadow:0 8px 30px rgba(45,106,79,.3)}
+.clock-btn.clock-out{background:linear-gradient(135deg,var(--danger),var(--primary-dark));color:#fff;box-shadow:0 8px 30px rgba(230,57,70,.3)}
+.clock-btn:active{transform:scale(.95)}
+.stock-low{color:var(--danger);font-weight:700}
+.stock-ok{color:var(--success);font-weight:600}
+.stock-bar{height:6px;border-radius:3px;background:var(--gray);overflow:hidden;margin-top:4px}
+.stock-fill{height:100%;border-radius:3px;transition:.3s}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:0}
+.modal{background:var(--white);border-radius:20px 20px 0 0;padding:24px 20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg);-webkit-overflow-scrolling:touch}
+.modal h3{margin-bottom:14px;font-size:1.1rem}
+.modal-handle{width:40px;height:4px;background:var(--gray2);border-radius:2px;margin:0 auto 16px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.8rem;font-weight:600;margin-bottom:4px;color:var(--dark)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px;border:2px solid var(--gray);border-radius:var(--radius-sm);font-size:.9rem;font-family:inherit;-webkit-appearance:none}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary)}
+.fab-cart{display:none;position:fixed;bottom:calc(var(--bottom-nav) + 16px);right:16px;width:56px;height:56px;border-radius:50%;background:var(--primary);color:#fff;border:none;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(230,57,70,.4);z-index:60;align-items:center;justify-content:center}
+.fab-cart .fab-badge{position:absolute;top:-4px;right:-4px;background:var(--dark);color:#fff;font-size:.7rem;font-weight:700;padding:2px 6px;border-radius:10px;min-width:18px;text-align:center}
+.conn-status{position:fixed;top:54px;left:50%;transform:translateX(-50%);padding:4px 14px;border-radius:20px;font-size:.75rem;font-weight:600;z-index:200;transition:.3s}
+.conn-online{background:var(--success-light);color:var(--success)}
+.conn-offline{background:var(--danger-light);color:var(--danger)}
+.hist-bar{height:24px;border-radius:4px;background:var(--primary);transition:.3s;min-width:2px}
+@media(min-width:769px){
+  .nav-time{display:block}
+  .stat-grid{grid-template-columns:repeat(4,1fr)}
+  .modal{border-radius:var(--radius);align-self:center}
+  .modal-overlay{align-items:center;padding:20px}
+  .menu-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+}
+@media(max-width:768px){
+  .sidebar{display:none}
+  .bottom-nav{display:block}
+  .main-content{padding:14px;padding-bottom:calc(var(--bottom-nav) + 20px);max-height:none;overflow-y:visible}
+  .layout{flex-direction:column;min-height:auto}
+  .order-panel{position:fixed;left:0;right:0;top:0;bottom:0;width:100%;height:100%;z-index:150;border:none;border-radius:0}
+  .fab-cart{display:flex}
+  .kitchen-grid{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .nav-info .nav-role{display:none}
+  .clock-display{font-size:2.2rem}
+  .clock-btn{width:130px;height:130px;font-size:1rem}
+  .dashboard-2col{grid-template-columns:1fr !important}
+}
+@media(max-width:380px){
+  .role-grid{grid-template-columns:1fr 1fr}
+  .menu-grid{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr}
+}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--gray2);border-radius:2px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .25s ease}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.slide-up{animation:slideUp .3s ease}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 2s infinite}
+input[type="text"],input[type="password"],input[type="number"],select,textarea{font-size:16px !important}
+@media print{.navbar,.sidebar,.bottom-nav,.fab-cart{display:none!important}.main-content{padding:0!important}}
+/* TV Dashboard Styles */
+.tv-dashboard{min-height:100vh;background:linear-gradient(135deg,#0a1628 0%,#1a2744 100%);color:#fff;font-family:'Inter',sans-serif;overflow:hidden}
+.tv-header{display:flex;justify-content:space-between;align-items:center;padding:20px 30px;border-bottom:1px solid rgba(255,255,255,.1)}
+.tv-logo{font-size:2rem;font-weight:800;color:#f4a261}
+.tv-clock{font-size:1.4rem;font-weight:300;color:rgba(255,255,255,.7)}
+.tv-stats{display:flex;gap:20px;padding:16px 30px;justify-content:center}
+.tv-stat{background:rgba(255,255,255,.06);border-radius:14px;padding:14px 24px;text-align:center;min-width:140px}
+.tv-stat-num{font-size:2rem;font-weight:800}
+.tv-stat-label{font-size:.75rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+.tv-columns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:16px 24px;flex:1;align-content:start;max-height:calc(100vh - 180px);overflow:hidden}
+.tv-col-title{font-size:.9rem;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;padding:10px 14px;border-radius:10px;margin-bottom:10px;text-align:center}
+.tv-order-card{background:rgba(255,255,255,.08);border-radius:12px;padding:14px;margin-bottom:10px;border-left:4px solid;transition:.3s}
+.tv-order-num{font-size:1.3rem;font-weight:800}
+.tv-order-type{font-size:.8rem;opacity:.7}
+.tv-order-items{font-size:.85rem;opacity:.9;margin-top:6px;line-height:1.6}
+.tv-order-time{font-size:.7rem;opacity:.5;margin-top:6px}
+@keyframes tvPulse{0%,100%{box-shadow:0 0 0 0 rgba(45,106,79,.4)}50%{box-shadow:0 0 20px 4px rgba(45,106,79,.3)}}
+.tv-order-card.tv-ready{animation:tvPulse 2s infinite}
+@media(max-width:768px){.tv-columns{grid-template-columns:1fr}.tv-stats{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>const {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  Component
+} = React;
+
+// Error Boundary to catch React rendering errors
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
+    };
+  }
+  static getDerivedStateFromError(error) {
+    return {
+      hasError: true,
+      error
+    };
+  }
+  componentDidCatch(error, errorInfo) {
+    this.setState({
+      errorInfo
+    });
+    console.error('React Error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return React.createElement('div', {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          fontFamily: 'sans-serif',
+          textAlign: 'center',
+          padding: '20px'
+        }
+      }, React.createElement('div', null, React.createElement('h2', {
+        style: {
+          color: '#e63946'
+        }
+      }, 'Error en la App'), React.createElement('p', {
+        style: {
+          color: '#333',
+          fontSize: '.9rem',
+          maxWidth: 600,
+          margin: '10px auto'
+        }
+      }, String(this.state.error)), React.createElement('pre', {
+        style: {
+          color: '#666',
+          fontSize: '.7rem',
+          textAlign: 'left',
+          maxWidth: 600,
+          margin: '10px auto',
+          overflow: 'auto',
+          maxHeight: 300,
+          background: '#f5f5f5',
+          padding: 12,
+          borderRadius: 8
+        }
+      }, this.state.errorInfo ? this.state.errorInfo.componentStack : 'No stack available'), React.createElement('button', {
+        onClick: () => this.setState({
+          hasError: false,
+          error: null,
+          errorInfo: null
+        }),
+        style: {
+          marginTop: 12,
+          padding: '10px 20px',
+          background: '#e63946',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 8,
+          cursor: 'pointer',
+          fontSize: '.9rem'
+        }
+      }, 'Reintentar')));
+    }
+    return this.props.children;
+  }
+}
+
+// ============== FIREBASE ==============
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDmxcGovRqZRpNyUJZ1yfiFwWrj4G5xiCg",
+  authDomain: "top-lomitos.firebaseapp.com",
+  databaseURL: "https://top-lomitos-default-rtdb.firebaseio.com",
+  projectId: "top-lomitos",
+  storageBucket: "top-lomitos.firebasestorage.app",
+  messagingSenderId: "938472409580",
+  appId: "1:938472409580:web:f4a68814f870ae45ead8c9"
+};
+let db = null;
+let fbReady = false;
+function initFB(config) {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    db = firebase.database();
+    fbReady = true;
+    return true;
+  } catch (e) {
+    console.error('Firebase init error:', e);
+    return false;
+  }
+}
+function fbRef(path) {
+  return db ? db.ref(path) : null;
+}
+function fbSet(path, data) {
+  return db ? db.ref(path).set(data) : Promise.resolve();
+}
+function fbUpdate(path, data) {
+  return db ? db.ref(path).update(data) : Promise.resolve();
+}
+function fbPush(path, data) {
+  return db ? db.ref(path).push(data) : Promise.resolve();
+}
+function fbRemove(path) {
+  return db ? db.ref(path).remove() : Promise.resolve();
+}
+function ensureArray(val) {
+  // Firebase sometimes returns objects instead of arrays for items
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (val && typeof val === 'object') return Object.values(val).filter(Boolean);
+  return [];
+}
+function useFirebaseList(path, defaultVal) {
+  const [data, setData] = useState(defaultVal || []);
+  useEffect(() => {
+    if (!db) return;
+    const ref = db.ref(path);
+    const handler = ref.on('value', snap => {
+      const val = snap.val();
+      if (val) {
+        const entries = Object.entries(val).filter(([k, v]) => v != null && typeof v === 'object').map(([k, v]) => ({
+          ...v,
+          _key: k
+        }));
+        setData(entries);
+      } else {
+        setData(defaultVal || []);
+      }
+    });
+    return () => ref.off('value', handler);
+  }, [path]);
+  return data;
+}
+function useFirebaseObj(path, defaultVal) {
+  const [data, setData] = useState(defaultVal || {});
+  useEffect(() => {
+    if (!db) return;
+    const ref = db.ref(path);
+    const handler = ref.on('value', snap => {
+      setData(snap.val() || defaultVal || {});
+    });
+    return () => ref.off('value', handler);
+  }, [path]);
+  return data;
+}
+
+// ============== MENU DATA ==============
+const MENU_DATA = [{
+  id: 'lomitos',
+  name: 'Lomitos Árabes',
+  icon: '🌯',
+  desc: 'En pan árabe tostado con repollo, tomate, cebolla, perejil, papa frita, salsa de ajo',
+  items: [{
+    id: 'l1',
+    name: 'De Carne',
+    price: 27000
+  }, {
+    id: 'l2',
+    name: 'Doble Carne',
+    price: 35000
+  }, {
+    id: 'l3',
+    name: 'Doble Carne Especial',
+    price: 38000
+  }, {
+    id: 'l4',
+    name: 'De Pollo',
+    price: 25000
+  }, {
+    id: 'l5',
+    name: 'Mixto (Carne y Pollo)',
+    price: 26000
+  }, {
+    id: 'l6',
+    name: 'De Tilapia',
+    price: 30000
+  }, {
+    id: 'l7',
+    name: 'De Atún',
+    price: 25000
+  }, {
+    id: 'l8',
+    name: 'Especiales (Jamón, Queso y Huevo)',
+    price: 30000
+  }, {
+    id: 'l9',
+    name: 'De Verduras (con Jamón y Queso)',
+    price: 15000
+  }, {
+    id: 'l10',
+    name: 'Vegetariano (Solo Verduras)',
+    price: 10000
+  }]
+}, {
+  id: 'sandwiches',
+  name: 'Sandwiches',
+  icon: '🥪',
+  items: [{
+    id: 's1',
+    name: 'De Lomito',
+    price: 25000
+  }, {
+    id: 's2',
+    name: 'De Pollo',
+    price: 23000
+  }, {
+    id: 's3',
+    name: 'De Milanesa',
+    price: 23000
+  }, {
+    id: 's4',
+    name: 'Mixto Caliente (Pan Hamburguesa)',
+    price: 10000
+  }, {
+    id: 's5',
+    name: 'Mixto Caliente (Pan Árabe)',
+    price: 12000
+  }, {
+    id: 's6',
+    name: 'Baurú',
+    price: 14000
+  }]
+}, {
+  id: 'hamburguesas',
+  name: 'Hamburguesas',
+  icon: '🍔',
+  items: [{
+    id: 'h1',
+    name: 'De Carne',
+    price: 15000
+  }, {
+    id: 'h2',
+    name: 'De Pollo',
+    price: 15000
+  }, {
+    id: 'h3',
+    name: 'Doble Carne',
+    price: 20000
+  }, {
+    id: 'h4',
+    name: 'TOP Tipo Casera',
+    price: 25000
+  }]
+}, {
+  id: 'jardineras',
+  name: 'Jardineras',
+  icon: '🥗',
+  items: [{
+    id: 'j1',
+    name: 'Jardinera Fría',
+    price: 80000
+  }, {
+    id: 'j2',
+    name: 'Jardinera Mixta',
+    price: 100000
+  }, {
+    id: 'j3',
+    name: 'Jardinera TOP',
+    price: 130000
+  }, {
+    id: 'j4',
+    name: 'Jardinera SUPER TOP',
+    price: 150000
+  }]
+}, {
+  id: 'platos',
+  name: 'Al Plato',
+  icon: '🍽️',
+  items: [{
+    id: 'p1',
+    name: 'Lomito Acebollado c/ Mandioca',
+    price: 45000
+  }, {
+    id: 'p2',
+    name: 'Bife/Milanesa c/ Mandioca',
+    price: 40000
+  }, {
+    id: 'p3',
+    name: 'Pechuga de Pollo c/ Mandioca',
+    price: 35000
+  }, {
+    id: 'p4',
+    name: 'Chamburreado TOP',
+    price: 40000
+  }]
+}, {
+  id: 'picadas',
+  name: 'Picadas',
+  icon: '🧀',
+  items: [{
+    id: 'pi1',
+    name: 'Papas Fritas Individual',
+    price: 15000
+  }, {
+    id: 'pi2',
+    name: 'Papas Fritas Grande',
+    price: 25000
+  }, {
+    id: 'pi3',
+    name: 'Papas c/ Cheddar y Panceta',
+    price: 35000
+  }, {
+    id: 'pi4',
+    name: 'Milanesitas de Carne o Pollo',
+    price: 35000
+  }, {
+    id: 'pi5',
+    name: 'Nuggets de Pollo',
+    price: 25000
+  }, {
+    id: 'pi6',
+    name: 'Pollo Frito',
+    price: 40000
+  }, {
+    id: 'pi7',
+    name: 'Bolitas de Queso',
+    price: 20000
+  }, {
+    id: 'pi8',
+    name: 'Chorizo de Viena c/ Mandioca',
+    price: 25000
+  }, {
+    id: 'pi9',
+    name: 'Mix de Chorizos c/ Mandioca',
+    price: 35000
+  }, {
+    id: 'pi10',
+    name: 'Huevitos de Codorniz',
+    price: 20000
+  }, {
+    id: 'pi11',
+    name: 'Jamón y Queso',
+    price: 25000
+  }, {
+    id: 'pi12',
+    name: 'Aceitunas',
+    price: 15000
+  }, {
+    id: 'pi13',
+    name: 'Mandioca Frita',
+    price: 15000
+  }]
+}, {
+  id: 'agregados',
+  name: 'Agregados',
+  icon: '➕',
+  items: [{
+    id: 'ag1',
+    name: 'Agregado Opcional',
+    price: 4000
+  }]
+}, {
+  id: 'gaseosas',
+  name: 'Gaseosas',
+  icon: '🥤',
+  items: [{
+    id: 'g1',
+    name: 'Coca Cola 250ml',
+    price: 5000
+  }, {
+    id: 'g2',
+    name: 'Coca Cola Ret. 350ml',
+    price: 6000
+  }, {
+    id: 'g3',
+    name: 'Coca Cola 500ml',
+    price: 9000
+  }, {
+    id: 'g4',
+    name: 'Coca Cola 1L',
+    price: 12000
+  }, {
+    id: 'g5',
+    name: 'Coca Cola 1½L',
+    price: 15000
+  }, {
+    id: 'g6',
+    name: 'Coca Cola 2L',
+    price: 18000
+  }, {
+    id: 'g7',
+    name: 'Pulp 250ml',
+    price: 5000
+  }, {
+    id: 'g8',
+    name: 'Pulp 500ml',
+    price: 8000
+  }, {
+    id: 'g9',
+    name: 'Pulp 1L',
+    price: 10000
+  }, {
+    id: 'g10',
+    name: 'Pulp 2L',
+    price: 15000
+  }, {
+    id: 'g11',
+    name: 'Agua 500ml',
+    price: 5000
+  }, {
+    id: 'g12',
+    name: 'Agua 1L',
+    price: 7000
+  }, {
+    id: 'g13',
+    name: 'Agua c/ Gas 500ml',
+    price: 6000
+  }, {
+    id: 'g14',
+    name: 'Agua Tónica 500ml',
+    price: 9000
+  }]
+}, {
+  id: 'cervezas',
+  name: 'Cervezas',
+  icon: '🍺',
+  items: [{
+    id: 'c1',
+    name: 'Skol Lata',
+    price: 6000
+  }, {
+    id: 'c2',
+    name: 'Brahma Sub Zero',
+    price: 6000
+  }, {
+    id: 'c3',
+    name: 'Bud 66',
+    price: 8000
+  }, {
+    id: 'c4',
+    name: 'Chopp P',
+    price: 8000
+  }, {
+    id: 'c5',
+    name: 'Chopp G',
+    price: 10000
+  }, {
+    id: 'c6',
+    name: 'Heineken 650ml',
+    price: 25000
+  }, {
+    id: 'c7',
+    name: 'Corona 750ml',
+    price: 25000
+  }, {
+    id: 'c8',
+    name: 'Miller 650ml',
+    price: 23000
+  }, {
+    id: 'c9',
+    name: 'Skol 1L',
+    price: 17000
+  }, {
+    id: 'c10',
+    name: 'Pilsen 1L',
+    price: 17000
+  }]
+}, {
+  id: 'personalizado',
+  name: 'Producto Personalizado',
+  icon: '🏷️',
+  items: []
+}];
+const EMPLOYEES_INIT = [
+// DÍA
+{id: 1, name: 'Lorena Zárate', role: 'mozo_interior', pin: '1001', turno: 'dia'},
+{id: 2, name: 'Ramona Villalba', role: 'mozo_interior', pin: '1002', turno: 'dia'},
+{id: 3, name: 'Luz', role: 'mozo_interior', pin: '1003', turno: 'dia'},
+// NOCHE
+{id: 4, name: 'Cristian Villalba', role: 'mozo_interior', pin: '1004', turno: 'noche'},
+{id: 5, name: 'Alicia Mendieta', role: 'mozo_exterior', pin: '1005', turno: 'noche'},
+{id: 6, name: 'Marilene Yegros', role: 'cajera', pin: '6666', turno: 'noche'},
+{id: 7, name: 'Lourdes Dávalos', role: 'mozo_interior', pin: '1007', turno: 'noche'},
+{id: 8, name: 'Lida Villalba', role: 'cocina', pin: '8888', turno: 'noche'},
+{id: 9, name: 'María Elena Sequeira', role: 'mozo_exterior', pin: '1009', turno: 'noche'},
+{id: 10, name: 'Sady Gavilán', role: 'mozo_interior', pin: '1010', turno: 'noche'},
+{id: 11, name: 'Cindy Pérez', role: 'cajera', pin: '1011', turno: 'noche'},
+{id: 12, name: 'Ruth', role: 'mozo_interior', pin: '1012', turno: 'noche'},
+// OCASIONALES
+{id: 13, name: 'Jaime', role: 'mozo_interior', pin: '1013', turno: 'ocasional'},
+{id: 14, name: 'Ezequiel', role: 'mozo_interior', pin: '1014', turno: 'ocasional'},
+// ADMIN
+{id: 15, name: 'André Admin', role: 'admin', pin: '0000', turno: 'todos'},
+// TV DASHBOARD
+{id: 16, name: 'TV Dashboard', role: 'tv', pin: '1234', turno: 'todos'}
+];
+const STOCK_INIT = [{
+  id: 1,
+  name: 'Carne Vacuna',
+  qty: 50,
+  unit: 'kg',
+  min: 10,
+  max: 80
+}, {
+  id: 2,
+  name: 'Pechuga de Pollo',
+  qty: 30,
+  unit: 'kg',
+  min: 8,
+  max: 50
+}, {
+  id: 3,
+  name: 'Pan Árabe',
+  qty: 200,
+  unit: 'u',
+  min: 50,
+  max: 300
+}, {
+  id: 4,
+  name: 'Pan Hamburguesa',
+  qty: 150,
+  unit: 'u',
+  min: 40,
+  max: 250
+}, {
+  id: 5,
+  name: 'Jamón',
+  qty: 15,
+  unit: 'kg',
+  min: 5,
+  max: 25
+}, {
+  id: 6,
+  name: 'Queso',
+  qty: 12,
+  unit: 'kg',
+  min: 4,
+  max: 20
+}, {
+  id: 7,
+  name: 'Lechuga',
+  qty: 25,
+  unit: 'u',
+  min: 10,
+  max: 40
+}, {
+  id: 8,
+  name: 'Tomate',
+  qty: 20,
+  unit: 'kg',
+  min: 5,
+  max: 30
+}, {
+  id: 9,
+  name: 'Cebolla',
+  qty: 18,
+  unit: 'kg',
+  min: 5,
+  max: 25
+}, {
+  id: 10,
+  name: 'Papa',
+  qty: 40,
+  unit: 'kg',
+  min: 15,
+  max: 60
+}, {
+  id: 11,
+  name: 'Mandioca',
+  qty: 35,
+  unit: 'kg',
+  min: 10,
+  max: 50
+}, {
+  id: 12,
+  name: 'Huevos',
+  qty: 120,
+  unit: 'u',
+  min: 30,
+  max: 200
+}, {
+  id: 13,
+  name: 'Coca Cola 500ml',
+  qty: 48,
+  unit: 'u',
+  min: 12,
+  max: 72
+}, {
+  id: 14,
+  name: 'Cerveza Skol',
+  qty: 60,
+  unit: 'u',
+  min: 24,
+  max: 96
+}, {
+  id: 15,
+  name: 'Aceite',
+  qty: 20,
+  unit: 'lt',
+  min: 5,
+  max: 30
+}, {
+  id: 16,
+  name: 'Chorizo',
+  qty: 10,
+  unit: 'kg',
+  min: 3,
+  max: 15
+}, {
+  id: 17,
+  name: 'Panceta',
+  qty: 8,
+  unit: 'kg',
+  min: 2,
+  max: 12
+}, {
+  id: 18,
+  name: 'Queso Cheddar',
+  qty: 5,
+  unit: 'kg',
+  min: 2,
+  max: 10
+}, {
+  id: 19,
+  name: 'Desinfectante',
+  qty: 5,
+  unit: 'lt',
+  min: 2,
+  max: 10
+}, {
+  id: 20,
+  name: 'Detergente',
+  qty: 5,
+  unit: 'lt',
+  min: 2,
+  max: 10
+}, {
+  id: 21,
+  name: 'Papel Higiénico',
+  qty: 20,
+  unit: 'u',
+  min: 8,
+  max: 40
+}, {
+  id: 22,
+  name: 'Desengrasante',
+  qty: 3,
+  unit: 'lt',
+  min: 1,
+  max: 6
+}, {
+  id: 23,
+  name: 'Jabón Líquido Baño',
+  qty: 3,
+  unit: 'lt',
+  min: 1,
+  max: 6
+}, {
+  id: 24,
+  name: 'Toalla para Manos',
+  qty: 5,
+  unit: 'u',
+  min: 2,
+  max: 10
+}, {
+  id: 25,
+  name: 'Lavandina',
+  qty: 5,
+  unit: 'lt',
+  min: 2,
+  max: 10
+}];
+const ROLE_LABELS = {
+  admin: 'Administrador',
+  mozo_interior: 'Mozo Interior',
+  mozo_exterior: 'Mozo Exterior',
+  cajera: 'Cajera',
+  cocina: 'Cocina',
+  prep: 'Preparación',
+  tv: 'TV Dashboard'
+};
+const ORDER_TYPES = {
+  mesa: '🪑 Mesa',
+  vehiculo: '🚗 Vehículo',
+  delivery: '🛵 Delivery',
+  carry_out: '📦 Llevar'
+};
+const STATUS_LABEL = {
+  awaiting_payment: 'Esperando Pago',
+  pending: 'Pendiente',
+  preparing: 'Preparando',
+  ready: 'Listo',
+  served: 'Servido',
+  paid: 'Pagado',
+  cancelled: 'Cancelado'
+};
+function formatGs(n) {
+  return 'Gs. ' + n.toLocaleString('es-PY');
+}
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+function timeAgo(ts) {
+  const d = Math.floor((Date.now() - ts) / 60000);
+  if (d < 1) return 'Ahora';
+  if (d < 60) return d + 'min';
+  return Math.floor(d / 60) + 'h ' + d % 60 + 'm';
+}
+function printTicket(order) {
+  const w = window.open('', '_blank', 'width=320,height=600');
+  if (!w) return alert('Permitir ventanas emergentes para imprimir tickets');
+  w.document.write('<html><head><style>' + 'body{font-family:monospace;width:72mm;margin:0 auto;padding:3mm;font-size:12px;color:#000}' + '.c{text-align:center}.b{font-weight:bold}.ln{border-bottom:1px dashed #000;margin:6px 0}' + '.r{display:flex;justify-content:space-between}.big{font-size:16px}' + '@media print{@page{margin:0;size:80mm auto}}' + '</style></head><body>' + '<div class="c b big">TOP LOMITOS</div>' + '<div class="c">Since 1995</div>' + '<div class="c">Tel: (0973) 505768 / (0973) 884414</div>' + '<div class="ln"></div>' + '<div>Pedido: <b>#' + (order.orderNum || '----') + '</b></div>' + '<div>Tipo: ' + ORDER_TYPES[order.type] + (order.tableNum ? ' #' + order.tableNum : '') + '</div>' + '<div>Mozo: ' + (order.waiter || '-') + '</div>' + '<div>Fecha: ' + new Date(order.createdAt).toLocaleString('es-PY') + '</div>' + '<div class="ln"></div>' + ensureArray(order.items).map(function (it) {
+    return '<div class="r"><span>' + it.qty + 'x ' + it.name + '</span><span>' + formatGs(it.price * it.qty) + '</span></div>';
+  }).join('') + '<div class="ln"></div>' + '<div class="r b big"><span>TOTAL</span><span>' + formatGs(order.total) + '</span></div>' + '<div class="ln"></div>' + (order.notes ? '<div>Nota: ' + order.notes + '</div><div class="ln"></div>' : '') + '<div class="c" style="margin-top:8px">Gracias por la preferencia!</div>' + '</body></html>');
+  w.document.close();
+  setTimeout(function () {
+    w.print();
+  }, 400);
+}
+
+function printKitchenTicket(order) {
+  var w = window.open('', '_blank', 'width=320,height=500');
+  if (!w) return alert('Permitir ventanas emergentes para imprimir tickets');
+  var itemsHtml = ensureArray(order.items).map(function(it) {
+    return '<div class="item"><span class="qty">' + it.qty + 'x</span> ' + it.name + '</div>';
+  }).join('');
+  var hora = new Date(order.createdAt).toLocaleTimeString('es-PY', {hour:'2-digit', minute:'2-digit'});
+  w.document.write('<html><head><style>' +
+    'body{font-family:monospace;width:72mm;margin:0 auto;padding:3mm;font-size:13px;color:#000}' +
+    '.c{text-align:center}.b{font-weight:bold}.ln{border-bottom:2px dashed #000;margin:8px 0}' +
+    '.big{font-size:22px;letter-spacing:1px}.med{font-size:16px}' +
+    '.item{font-size:16px;padding:4px 0;border-bottom:1px dotted #ccc}' +
+    '.qty{font-weight:bold;font-size:18px;margin-right:4px}' +
+    '.nota{font-size:14px;padding:8px;border:2px solid #000;border-radius:6px;margin-top:6px;font-style:italic}' +
+    '@media print{@page{margin:0;size:80mm auto}}' +
+    '</style></head><body>' +
+    '<div class="c b big">COCINA</div>' +
+    '<div class="ln"></div>' +
+    '<div class="c b big">#' + (order.orderNum || '----') + '</div>' +
+    '<div class="c med" style="margin-top:4px">' + ORDER_TYPES[order.type] + (order.tableNum ? ' #' + order.tableNum : '') + '</div>' +
+    (order.vehicleDesc ? '<div class="c med" style="margin-top:4px">🚗 ' + order.vehicleDesc + '</div>' : '') +
+    '<div class="c" style="margin-top:2px;font-size:11px">Mozo: ' + (order.waiter || '-') + ' | ' + hora + '</div>' +
+    '<div class="ln"></div>' +
+    itemsHtml +
+    '<div class="ln"></div>' +
+    (order.notes ? '<div class="nota">📌 ' + order.notes + '</div>' : '') +
+    (order.clientName ? '<div style="font-size:12px;margin-top:6px">👤 ' + order.clientName + (order.clientPhone ? ' 📞 ' + order.clientPhone : '') + '</div>' : '') +
+    (order.clientAddress ? '<div style="font-size:12px">📍 ' + order.clientAddress + '</div>' : '') +
+    '</body></html>');
+  w.document.close();
+  setTimeout(function() { w.print(); }, 400);
+}
+
+// ============== SEED DATABASE ==============
+async function seedIfEmpty() {
+  const snap = await db.ref('employees').once('value');
+  if (!snap.val()) {
+    const empData = {};
+    EMPLOYEES_INIT.forEach(e => {
+      empData[e.id] = e;
+    });
+    await db.ref('employees').set(empData);
+    const stockData = {};
+    STOCK_INIT.forEach(s => {
+      stockData[s.id] = s;
+    });
+    await db.ref('stock').set(stockData);
+  } else {
+    // Always ensure TV Dashboard and Admin users exist
+    const existing = snap.val();
+    const hasTV = Object.values(existing).some(e => e && e.role === 'tv');
+    if (!hasTV) {
+      await db.ref('employees/16').set({id: 16, name: 'TV Dashboard', role: 'tv', pin: '1234', turno: 'todos'});
+    }
+    const hasAdmin = Object.values(existing).some(e => e && e.role === 'admin');
+    if (!hasAdmin) {
+      await db.ref('employees/15').set({id: 15, name: 'André Admin', role: 'admin', pin: '0000', turno: 'todos'});
+    }
+  }
+}
+
+// ============== SETUP WIZARD ==============
+function SetupPage({
+  onSave
+}) {
+  const [step, setStep] = useState(1);
+  const [configText, setConfigText] = useState('');
+  const [error, setError] = useState('');
+  function handleSave() {
+    try {
+      let cfg = configText.trim();
+      // Strip everything before the first {
+      const braceStart = cfg.indexOf('{');
+      const braceEnd = cfg.lastIndexOf('}');
+      if (braceStart === -1 || braceEnd === -1) throw new Error('No se encontró el bloque { }');
+      cfg = cfg.slice(braceStart, braceEnd + 1);
+      // Extract key-value pairs manually to avoid regex issues with URLs
+      const result = {};
+      const lines = cfg.replace(/[{}]/g, '').split(/[,\n]/).map(l => l.trim()).filter(Boolean);
+      lines.forEach(line => {
+        const m = line.match(/^["']?(\w+)["']?\s*:\s*["'](.+?)["']$/);
+        if (m) result[m[1]] = m[2];
+      });
+      if (!result.apiKey || !result.databaseURL) throw new Error('Falta apiKey o databaseURL. Asegurate de copiar todo el bloque firebaseConfig');
+      localStorage.setItem('fb_config', JSON.stringify(result));
+      onSave(result);
+    } catch (e) {
+      setError('Error: ' + e.message);
+    }
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "login-bg"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-card fade-in",
+    style: {
+      maxWidth: 550,
+      textAlign: 'left'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-logo"
+  }, "\uD83C\uDF2F Top Lomitos"), /*#__PURE__*/React.createElement("div", {
+    className: "login-sub"
+  }, "Configuraci\xF3n Inicial \u2014 Base de Datos")), step === 1 && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.9rem',
+      lineHeight: 1.6,
+      marginBottom: 16
+    }
+  }, "Para que el sistema funcione en todos los dispositivos al mismo tiempo, necesitamos conectar una base de datos gratuita de ", /*#__PURE__*/React.createElement("b", null, "Firebase"), ". Solo se hace una vez."), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      background: 'var(--light)',
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.85rem',
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "Paso 1: Crear proyecto en Firebase"), /*#__PURE__*/React.createElement("ol", {
+    style: {
+      fontSize: '.82rem',
+      lineHeight: 1.8,
+      paddingLeft: 20
+    }
+  }, /*#__PURE__*/React.createElement("li", null, "Ir a ", /*#__PURE__*/React.createElement("b", null, "console.firebase.google.com")), /*#__PURE__*/React.createElement("li", null, "Click en ", /*#__PURE__*/React.createElement("b", null, "\"Agregar proyecto\""), " o ", /*#__PURE__*/React.createElement("b", null, "\"Add project\"")), /*#__PURE__*/React.createElement("li", null, "Nombre: ", /*#__PURE__*/React.createElement("b", null, "top-lomitos"), " (o lo que quieras)"), /*#__PURE__*/React.createElement("li", null, "Desactivar Google Analytics (no es necesario)"), /*#__PURE__*/React.createElement("li", null, "Click ", /*#__PURE__*/React.createElement("b", null, "\"Crear proyecto\"")))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    style: {
+      marginTop: 14
+    },
+    onClick: () => setStep(2)
+  }, "Siguiente \u2192")), step === 2 && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      background: 'var(--light)',
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.85rem',
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "Paso 2: Crear base de datos"), /*#__PURE__*/React.createElement("ol", {
+    style: {
+      fontSize: '.82rem',
+      lineHeight: 1.8,
+      paddingLeft: 20
+    }
+  }, /*#__PURE__*/React.createElement("li", null, "En el panel izquierdo, click ", /*#__PURE__*/React.createElement("b", null, "\"Compilaci\xF3n\""), " \u2192 ", /*#__PURE__*/React.createElement("b", null, "\"Realtime Database\"")), /*#__PURE__*/React.createElement("li", null, "Click ", /*#__PURE__*/React.createElement("b", null, "\"Crear una base de datos\"")), /*#__PURE__*/React.createElement("li", null, "Ubicaci\xF3n: ", /*#__PURE__*/React.createElement("b", null, "United States (us-central1)")), /*#__PURE__*/React.createElement("li", null, "Seleccionar ", /*#__PURE__*/React.createElement("b", null, "\"Comenzar en modo de prueba\"")), /*#__PURE__*/React.createElement("li", null, "Click ", /*#__PURE__*/React.createElement("b", null, "\"Habilitar\"")))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    style: {
+      marginTop: 14
+    },
+    onClick: () => setStep(3)
+  }, "Siguiente \u2192"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-block",
+    style: {
+      marginTop: 8
+    },
+    onClick: () => setStep(1)
+  }, "\u2190 Atr\xE1s")), step === 3 && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      background: 'var(--light)',
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.85rem',
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "Paso 3: Copiar configuraci\xF3n"), /*#__PURE__*/React.createElement("ol", {
+    style: {
+      fontSize: '.82rem',
+      lineHeight: 1.8,
+      paddingLeft: 20
+    }
+  }, /*#__PURE__*/React.createElement("li", null, "Click en el \xEDcono de ", /*#__PURE__*/React.createElement("b", null, "engranaje \u2699\uFE0F"), " (arriba a la izquierda) \u2192 ", /*#__PURE__*/React.createElement("b", null, "\"Configuraci\xF3n del proyecto\"")), /*#__PURE__*/React.createElement("li", null, "Bajar hasta ", /*#__PURE__*/React.createElement("b", null, "\"Tus apps\"")), /*#__PURE__*/React.createElement("li", null, "Click en el \xEDcono ", /*#__PURE__*/React.createElement("b", null, "</>"), " (Web)"), /*#__PURE__*/React.createElement("li", null, "Nombre: ", /*#__PURE__*/React.createElement("b", null, "top-lomitos")), /*#__PURE__*/React.createElement("li", null, "NO marcar Firebase Hosting"), /*#__PURE__*/React.createElement("li", null, "Click ", /*#__PURE__*/React.createElement("b", null, "\"Registrar app\"")), /*#__PURE__*/React.createElement("li", null, "Copiar el bloque ", /*#__PURE__*/React.createElement("b", null, "firebaseConfig"), " que aparece"))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group",
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "Peg\xE1 aqu\xED el bloque firebaseConfig:"), /*#__PURE__*/React.createElement("textarea", {
+    rows: 8,
+    style: {
+      width: '100%',
+      padding: 12,
+      border: '2px solid var(--gray)',
+      borderRadius: 8,
+      fontFamily: 'monospace',
+      fontSize: '.8rem'
+    },
+    placeholder: '{\n  apiKey: "AIza...",\n  authDomain: "tu-proyecto.firebaseapp.com",\n  databaseURL: "https://tu-proyecto-default-rtdb.firebaseio.com",\n  projectId: "tu-proyecto",\n  storageBucket: "...",\n  messagingSenderId: "...",\n  appId: "..."\n}',
+    value: configText,
+    onChange: e => {
+      setConfigText(e.target.value);
+      setError('');
+    }
+  })), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--danger)',
+      fontSize: '.82rem',
+      marginBottom: 12,
+      padding: 8,
+      background: 'var(--danger-light)',
+      borderRadius: 8
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    onClick: handleSave
+  }, "\uD83D\uDD17 Conectar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-block",
+    style: {
+      marginTop: 8
+    },
+    onClick: () => setStep(2)
+  }, "\u2190 Atr\xE1s"))));
+}
+
+// ============== APP ==============
+function App() {
+  const [fbConnected, setFbConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState('dashboard');
+  const [now, setNow] = useState(new Date());
+  const [connStatus, setConnStatus] = useState('checking');
+  useEffect(() => {
+    if (initFB(FIREBASE_CONFIG)) {
+      seedIfEmpty().then(() => {
+        setFbConnected(true);
+        setLoading(false);
+      });
+      db.ref('.info/connected').on('value', snap => {
+        setConnStatus(snap.val() ? 'online' : 'offline');
+      });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    className: "login-bg"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-logo"
+  }, "\uD83C\uDF2F Top Lomitos"), /*#__PURE__*/React.createElement("div", {
+    className: "login-sub"
+  }, "Conectando..."), /*#__PURE__*/React.createElement("div", {
+    className: "pulse",
+    style: {
+      fontSize: '2rem',
+      marginTop: 10
+    }
+  }, "\u23F3")));
+  if (!fbConnected) return /*#__PURE__*/React.createElement("div", {
+    className: "login-bg"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-logo"
+  }, "\uD83C\uDF2F Top Lomitos"), /*#__PURE__*/React.createElement("div", {
+    className: "login-sub",
+    style: {
+      color: 'var(--danger)'
+    }
+  }, "Error de conexi\xF3n. Verificar Firebase.")));
+  return /*#__PURE__*/React.createElement(AppMain, {
+    user: user,
+    setUser: setUser,
+    page: page,
+    setPage: setPage,
+    now: now,
+    connStatus: connStatus
+  });
+}
+
+// Sound notification helper
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.value = 0.3;
+    osc.start();
+    osc.stop(ctx.currentTime + 0.15);
+    setTimeout(() => {
+      const o2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      o2.connect(g2);
+      g2.connect(ctx.destination);
+      o2.frequency.value = 1100;
+      o2.type = 'sine';
+      g2.gain.value = 0.3;
+      o2.start();
+      o2.stop(ctx.currentTime + 0.2);
+    }, 200);
+  } catch (e) {}
+}
+function AppMain({
+  user,
+  setUser,
+  page,
+  setPage,
+  now,
+  connStatus
+}) {
+  const employees = useFirebaseList('employees', []);
+  const stock = useFirebaseList('stock', []);
+  const dateKey = todayStr();
+  const orders = useFirebaseList('orders', []);
+  const clockRecords = useFirebaseList('clockRecords', []);
+  const [showConn, setShowConn] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const prevOrdersRef = useRef({});
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
+
+  // Request browser notification permission
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Track order status changes for notifications
+  useEffect(() => {
+    if (!user) return;
+    const prev = prevOrdersRef.current;
+    orders.forEach(o => {
+      const prevStatus = prev[o.id];
+      if (prevStatus && prevStatus !== o.status) {
+        // Notify waiter when their order is ready
+        if (o.status === 'ready' && o.waiter === user.name) {
+          const msg = `✅ Pedido #${o.orderNum} LISTO! ${ORDER_TYPES[o.type]}${o.tableNum ? ' #' + o.tableNum : ''}`;
+          setNotifications(n => [{
+            id: Date.now(),
+            msg,
+            order: o,
+            time: Date.now()
+          }, ...n.slice(0, 19)]);
+          playNotifSound();
+          // Browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('🌯 Top Lomitos', {
+              body: msg,
+              icon: '🌯',
+              tag: 'order-' + o.id
+            });
+          }
+        }
+        // Notify waiter when their order starts preparing
+        if (o.status === 'preparing' && o.waiter === user.name) {
+          const msg = `🔥 Pedido #${o.orderNum} se está preparando`;
+          setNotifications(n => [{
+            id: Date.now(),
+            msg,
+            order: o,
+            time: Date.now()
+          }, ...n.slice(0, 19)]);
+        }
+        // Notify cajera of new awaiting_payment orders
+        if (o.status === 'awaiting_payment' && (user.role === 'cajera' || user.role === 'admin')) {
+          const msg = `🚗 Nuevo pedido vehículo #${o.orderNum} — Cobrar!`;
+          setNotifications(n => [{
+            id: Date.now(),
+            msg,
+            order: o,
+            time: Date.now()
+          }, ...n.slice(0, 19)]);
+          playNotifSound();
+        }
+      }
+    });
+    const newPrev = {};
+    orders.forEach(o => {
+      newPrev[o.id] = o.status;
+    });
+    prevOrdersRef.current = newPrev;
+  }, [orders]);
+
+  // Notify admin+prep when shopping list is finalized/purchasing/received
+  const prevListaRef = useRef(null);
+  const listaToday = useFirebaseObj('listaCompras/' + dateKey, null);
+  useEffect(() => {
+    if (!user || !listaToday) return;
+    var prev = prevListaRef.current;
+    var curr = listaToday.status || 'draft';
+    if (prev && prev !== curr) {
+      var itemCount = listaToday.items ? ensureArray(listaToday.items).filter(function(i){return i && i.desc;}).length : 0;
+      if (curr === 'finalized' && (user.role === 'prep' || user.role === 'admin')) {
+        var msg = '\uD83D\uDED2 Nueva solicitud de compras (' + itemCount + ' \u00EDtems) de ' + (listaToday.finalizedBy || '?');
+        setNotifications(function(n) { return [{id: Date.now(), msg: msg, time: Date.now()}, ...n.slice(0, 19)]; });
+        playNotifSound();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('\uD83C\uDF2F Top Lomitos', {body: msg, tag: 'lista-finalized'});
+        }
+      }
+      if (curr === 'purchasing' && (user.role === 'admin' || user.role !== 'prep')) {
+        var msg2 = '\uD83D\uDED2 Compra en curso por ' + (listaToday.purchasingBy || '?') + ' (' + itemCount + ' \u00EDtems)';
+        setNotifications(function(n) { return [{id: Date.now(), msg: msg2, time: Date.now()}, ...n.slice(0, 19)]; });
+      }
+      if (curr === 'received') {
+        var msg3 = '\u2705 Compra recibida por ' + (listaToday.receivedBy || '?') + ' (' + itemCount + ' \u00EDtems)';
+        setNotifications(function(n) { return [{id: Date.now(), msg: msg3, time: Date.now()}, ...n.slice(0, 19)]; });
+        playNotifSound();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('\uD83C\uDF2F Top Lomitos', {body: msg3, tag: 'lista-received'});
+        }
+      }
+    }
+    prevListaRef.current = curr;
+  }, [listaToday]);
+
+  // Notify admin when new solicitud de reparación is created
+  const solicitudesAll = useFirebaseList('solicitudes', []);
+  const prevSolCountRef = useRef(null);
+  useEffect(() => {
+    if (!user) return;
+    var count = solicitudesAll.length;
+    var prev = prevSolCountRef.current;
+    if (prev !== null && count > prev && (user.role === 'admin' || user.role === 'prep')) {
+      var newest = solicitudesAll[solicitudesAll.length - 1];
+      if (newest) {
+        var msg = '\uD83D\uDD27 Nueva solicitud de reparaci\u00F3n: ' + (newest.description || '').substring(0, 50) + (newest.createdBy ? ' — ' + newest.createdBy : '');
+        setNotifications(function(n) { return [{id: Date.now(), msg: msg, time: Date.now()}, ...n.slice(0, 19)]; });
+        playNotifSound();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('\uD83C\uDF2F Top Lomitos', {body: msg, tag: 'solicitud-' + Date.now()});
+        }
+      }
+    }
+    prevSolCountRef.current = count;
+  }, [solicitudesAll]);
+
+  // Notify admin when solicitud status changes
+  const prevSolStatusRef = useRef({});
+  useEffect(() => {
+    if (!user || user.role === 'admin') return;
+    var prev = prevSolStatusRef.current;
+    solicitudesAll.forEach(function(s) {
+      var key = s._key || s.id;
+      if (prev[key] && prev[key] !== s.status && s.createdBy === user.name) {
+        var statusLabel = s.status === 'in_progress' ? 'en progreso' : s.status === 'done' ? 'resuelta' : 'pendiente';
+        var msg = '\uD83D\uDD27 Tu solicitud "' + (s.description || '').substring(0, 30) + '..." est\u00E1 ' + statusLabel;
+        setNotifications(function(n) { return [{id: Date.now(), msg: msg, time: Date.now()}, ...n.slice(0, 19)]; });
+        playNotifSound();
+      }
+    });
+    var newPrev = {};
+    solicitudesAll.forEach(function(s) { newPrev[s._key || s.id] = s.status; });
+    prevSolStatusRef.current = newPrev;
+  }, [solicitudesAll]);
+
+  useEffect(() => {
+    if (connStatus === 'offline') {
+      setShowConn(true);
+    } else if (connStatus === 'online') {
+      setShowConn(true);
+      setTimeout(() => setShowConn(false), 2000);
+    }
+  }, [connStatus]);
+  const todayOrders = orders.filter(o => o.date === dateKey);
+  const activeOrders = todayOrders.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
+  const paidToday = todayOrders.filter(o => o.status === 'paid');
+  const dailySales = paidToday.reduce((s, o) => s + (o.total || 0), 0) + todayOrders.filter(o => o.status !== 'awaiting_payment' && o.status !== 'cancelled' && o.type === 'vehiculo' && o.status !== 'paid').reduce((s, o) => s + (o.total || 0), 0);
+  function handleLogin(emp) {
+    setUser(emp);
+    setPage(emp.role === 'tv' ? 'tv' : emp.role === 'prep' ? 'prep_dash' : emp.role === 'cocina' ? 'cocina' : emp.role === 'cajera' ? 'caja' : emp.role === 'admin' ? 'dashboard' : 'pedidos');
+  }
+  function handleLogout() {
+    setUser(null);
+    setPage('dashboard');
+  }
+  async function addOrder(order) {
+    const dk = todayStr();
+    const counterRef = db.ref('counters/' + dk);
+    const result = await counterRef.transaction(c => (c || 0) + 1);
+    const num = result.snapshot.val();
+    const orderNum = String(num).padStart(4, '0');
+    let displayOrderNum = orderNum;
+    let agregadoNum = null;
+
+    // If this is an agregado, calculate agregadoNum and format display
+    if (order.parentOrderNum && order.isAgregado) {
+      const agreCount = orders.filter(o => o.parentOrderNum === order.parentOrderNum).length + 1;
+      agregadoNum = agreCount;
+      displayOrderNum = order.parentOrderNum + '-A' + agregadoNum;
+    }
+
+    const key = dk + '_' + orderNum;
+    const initialStatus = order.type === 'vehiculo' ? 'awaiting_payment' : 'pending';
+    const dataToSave = {
+      ...order,
+      id: key,
+      orderNum: displayOrderNum,
+      createdAt: Date.now(),
+      status: initialStatus,
+      date: dk
+    };
+    if (agregadoNum) {
+      dataToSave.agregadoNum = agregadoNum;
+    }
+    await fbSet('orders/' + key, dataToSave);
+  }
+  function updateOrder(id, updates) {
+    const key = id;
+    fbUpdate('orders/' + key, updates);
+  }
+  function updateStock(id, data) {
+    fbUpdate('stock/' + id, data);
+  }
+  function setStockFull(newStock) {
+    // For individual item updates from StockPage
+    newStock.forEach(s => {
+      fbSet('stock/' + s.id, s);
+    });
+  }
+  function addClockRecord(record) {
+    fbPush('clockRecords', record);
+  }
+  function updateClockRecord(key, data) {
+    fbUpdate('clockRecords/' + key, data);
+  }
+  function addEmployee(emp) {
+    fbSet('employees/' + emp.id, emp);
+  }
+  function removeEmployee(id) {
+    fbRemove('employees/' + id);
+  }
+  function updateEmployee(id, data) {
+    fbUpdate('employees/' + id, data);
+  }
+  function deleteOrder(id) {
+    fbRemove('orders/' + id);
+  }
+  function removeStockItem(id) {
+    fbRemove('stock/' + id);
+  }
+  async function resetDay() {
+    const dk = todayStr();
+    // Delete all today's orders
+    const todayKeys = orders.filter(o => o.date === dk).map(o => o._key || o.id);
+    const updates = {};
+    todayKeys.forEach(k => { updates['orders/' + k] = null; });
+    // Reset daily counter
+    updates['counters/' + dk] = null;
+    if (Object.keys(updates).length > 0) {
+      await db.ref().update(updates);
+    }
+  }
+  if (!user) return /*#__PURE__*/React.createElement(LoginScreen, {
+    employees: employees,
+    onLogin: handleLogin
+  });
+  // TV Dashboard mode - full screen, no navbar
+  if (user.role === 'tv') return /*#__PURE__*/React.createElement(TVDashboard, {
+    orders: orders,
+    now: now,
+    onExit: handleLogout
+  });
+  const menuByRole = {
+    admin: ['dashboard', 'pedidos', 'cocina', 'caja', 'stock', 'prep_dash', 'lista', 'solicitudes', 'marcacion', 'historial', 'empleados'],
+    mozo_interior: ['pedidos', 'lista', 'solicitudes', 'marcacion'],
+    mozo_exterior: ['pedidos', 'lista', 'solicitudes', 'marcacion'],
+    cajera: ['caja', 'pedidos', 'lista', 'solicitudes', 'marcacion'],
+    cocina: ['cocina', 'lista', 'solicitudes', 'marcacion'],
+    prep: ['prep_dash', 'stock', 'lista', 'solicitudes', 'marcacion']
+  };
+  const allowed = menuByRole[user.role] || [];
+  const navItems = [{
+    key: 'dashboard',
+    icon: '📊',
+    label: 'Inicio'
+  }, {
+    key: 'pedidos',
+    icon: '📝',
+    label: 'Pedidos'
+  }, {
+    key: 'cocina',
+    icon: '👨‍🍳',
+    label: 'Cocina'
+  }, {
+    key: 'caja',
+    icon: '💰',
+    label: 'Caja'
+  }, {
+    key: 'stock',
+    icon: '📦',
+    label: 'Stock'
+  }, {
+    key: 'marcacion',
+    icon: '⏰',
+    label: 'Marcar'
+  }, {
+    key: 'historial',
+    icon: '📈',
+    label: 'Historial'
+  }, {
+    key: 'empleados',
+    icon: '👥',
+    label: 'Equipo'
+  }, {
+    key: 'prep_dash',
+    icon: '📦',
+    label: 'Prep'
+  }, {
+    key: 'lista',
+    icon: '🛒',
+    label: 'Compras'
+  }, {
+    key: 'solicitudes',
+    icon: '🔧',
+    label: 'Solicitudes'
+  }].filter(n => allowed.includes(n.key));
+  const pendingKitchen = todayOrders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
+  const awaitingPayment = todayOrders.filter(o => o.status === 'awaiting_payment').length;
+  const readyOrders = todayOrders.filter(o => o.status === 'ready' || o.status === 'served').length;
+  const cajaBadge = readyOrders + awaitingPayment;
+  const myReadyOrders = todayOrders.filter(o => o.waiter === user.name && o.status === 'ready').length;
+  const unreadNotifs = notifications.filter(n => Date.now() - n.time < 300000).length; // last 5 min
+
+  return /*#__PURE__*/React.createElement("div", {
+    className: "app"
+  }, showConn && /*#__PURE__*/React.createElement("div", {
+    className: `conn-status ${connStatus === 'online' ? 'conn-online' : 'conn-offline'}`
+  }, connStatus === 'online' ? '✅ Conectado' : '⚠️ Sin conexión — Modo offline'), /*#__PURE__*/React.createElement("nav", {
+    className: "navbar"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "nav-brand"
+  }, "\uD83C\uDF2F Top Lomitos"), /*#__PURE__*/React.createElement("div", {
+    className: "nav-info"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "nav-time"
+  }, now.toLocaleTimeString('es-PY', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })), /*#__PURE__*/React.createElement("span", {
+    className: "nav-role"
+  }, ROLE_LABELS[user.role]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600,
+      fontSize: '.8rem'
+    }
+  }, user.name.split(' ')[0]), /*#__PURE__*/React.createElement("button", {
+    className: "nav-btn",
+    style: {
+      position: 'relative'
+    },
+    onClick: () => setShowNotifPanel(!showNotifPanel)
+  }, "\uD83D\uDD14", unreadNotifs > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      background: 'var(--danger)',
+      color: '#fff',
+      fontSize: '.6rem',
+      fontWeight: 700,
+      padding: '1px 5px',
+      borderRadius: 10,
+      minWidth: 16,
+      textAlign: 'center'
+    }
+  }, unreadNotifs)), /*#__PURE__*/React.createElement("button", {
+    className: "nav-btn",
+    onClick: handleLogout
+  }, "Salir"))), showNotifPanel && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      top: 52,
+      right: 8,
+      width: 320,
+      maxHeight: 400,
+      background: 'var(--white)',
+      borderRadius: '0 0 12px 12px',
+      boxShadow: 'var(--shadow-lg)',
+      zIndex: 150,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px 14px',
+      borderBottom: '1px solid var(--gray)',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      fontSize: '.9rem'
+    }
+  }, "\uD83D\uDD14 Notificaciones"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => {
+      setNotifications([]);
+      setShowNotifPanel(false);
+    }
+  }, "Limpiar")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowY: 'auto',
+      maxHeight: 340
+    }
+  }, notifications.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      padding: 20,
+      textAlign: 'center',
+      color: 'var(--gray3)',
+      fontSize: '.85rem'
+    }
+  }, "Sin notificaciones"), notifications.map(n => /*#__PURE__*/React.createElement("div", {
+    key: n.id,
+    style: {
+      padding: '10px 14px',
+      borderBottom: '1px solid var(--gray)',
+      fontSize: '.82rem',
+      cursor: 'pointer'
+    },
+    onClick: () => {
+      setShowNotifPanel(false);
+      setPage('pedidos');
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600
+    }
+  }, n.msg), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.7rem',
+      color: 'var(--gray3)',
+      marginTop: 2
+    }
+  }, timeAgo(n.time)))))), showNotifPanel && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      zIndex: 140
+    },
+    onClick: () => setShowNotifPanel(false)
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "layout"
+  }, /*#__PURE__*/React.createElement("aside", {
+    className: "sidebar"
+  }, navItems.map(n => /*#__PURE__*/React.createElement("div", {
+    key: n.key,
+    className: `sidebar-item ${page === n.key ? 'active' : ''}`,
+    onClick: () => setPage(n.key)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "si-icon"
+  }, n.icon), n.label, n.key === 'cocina' && pendingKitchen > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-pending",
+    style: {
+      marginLeft: 'auto'
+    }
+  }, pendingKitchen), n.key === 'caja' && cajaBadge > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-ready",
+    style: {
+      marginLeft: 'auto'
+    }
+  }, cajaBadge)))), /*#__PURE__*/React.createElement("main", {
+    className: "main-content"
+  }, page === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
+    orders: todayOrders,
+    activeOrders: activeOrders,
+    stock: stock,
+    now: now,
+    dailySales: dailySales,
+    onResetDay: user.role === 'admin' ? resetDay : null
+  }), page === 'pedidos' && /*#__PURE__*/React.createElement(PedidosPage, {
+    user: user,
+    onAddOrder: addOrder,
+    activeOrders: activeOrders,
+    onUpdateOrder: updateOrder
+  }), page === 'cocina' && /*#__PURE__*/React.createElement(CocinaPage, {
+    orders: todayOrders.filter(o => o.status === 'pending' || o.status === 'preparing'),
+    onUpdateOrder: updateOrder
+  }), page === 'caja' && /*#__PURE__*/React.createElement(CajaPage, {
+    orders: todayOrders,
+    onUpdateOrder: updateOrder,
+    onDeleteOrder: deleteOrder,
+    dailySales: dailySales,
+    userRole: user.role
+  }), page === 'stock' && /*#__PURE__*/React.createElement(StockPage, {
+    stock: stock,
+    updateStock: updateStock,
+    removeStockItem: removeStockItem
+  }), page === 'marcacion' && /*#__PURE__*/React.createElement(MarcacionPage, {
+    employees: employees,
+    clockRecords: clockRecords,
+    addClockRecord: addClockRecord,
+    updateClockRecord: updateClockRecord,
+    now: now
+  }), page === 'historial' && /*#__PURE__*/React.createElement(HistorialPage, {
+    allOrders: orders
+  }), page === 'empleados' && /*#__PURE__*/React.createElement(EmpleadosPage, {
+    employees: employees,
+    addEmployee: addEmployee,
+    removeEmployee: removeEmployee,
+    updateEmployee: updateEmployee
+  }), page === 'prep_dash' && /*#__PURE__*/React.createElement(PrepDashboardPage, {
+    user: user
+  }), page === 'lista' && /*#__PURE__*/React.createElement(ListaComprasPage, {
+    user: user
+  }), page === 'solicitudes' && /*#__PURE__*/React.createElement(SolicitudesPage, {
+    user: user
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "bottom-nav"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "bottom-nav-inner"
+  }, navItems.slice(0, 5).map(n => /*#__PURE__*/React.createElement("div", {
+    key: n.key,
+    className: `bnav-item ${page === n.key ? 'active' : ''}`,
+    onClick: () => setPage(n.key)
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "bnav-icon"
+  }, n.icon), /*#__PURE__*/React.createElement("span", {
+    className: "bnav-label"
+  }, n.label), n.key === 'cocina' && pendingKitchen > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "bnav-badge"
+  }, pendingKitchen), n.key === 'caja' && cajaBadge > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "bnav-badge"
+  }, cajaBadge))), navItems.length > 5 && /*#__PURE__*/React.createElement("div", {
+    className: "bnav-item",
+    onClick: () => {
+      const remaining = navItems.slice(5);
+      if (remaining.length === 1) setPage(remaining[0].key);else setPage(remaining.find(r => r.key !== page)?.key || remaining[0].key);
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "bnav-icon"
+  }, "\u22EF"), /*#__PURE__*/React.createElement("span", {
+    className: "bnav-label"
+  }, "M\xE1s")))));
+}
+
+// ============== LOGIN ==============
+function LoginScreen({
+  employees,
+  onLogin
+}) {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [selectedRole, setSelectedRole] = useState('');
+
+  // Find matching employee as user types PIN
+  const matchedEmp = employees.find(e => e && e.pin === pin);
+  const matchedRole = matchedEmp ? matchedEmp.role : '';
+  function handleSubmit(e) {
+    e.preventDefault();
+    const emp = matchedEmp || employees.find(e => e && e.pin === pin);
+    if (!emp) {
+      setError('PIN incorrecto');
+      return;
+    }
+    onLogin(emp);
+  }
+  const roles = [{
+    key: 'admin',
+    icon: '👑',
+    label: 'Admin'
+  }, {
+    key: 'mozo_interior',
+    icon: '🪑',
+    label: 'Mozo Int.'
+  }, {
+    key: 'mozo_exterior',
+    icon: '🚗',
+    label: 'Mozo Ext.'
+  }, {
+    key: 'cajera',
+    icon: '💰',
+    label: 'Cajera'
+  }, {
+    key: 'cocina',
+    icon: '👨‍🍳',
+    label: 'Cocina'
+  }, {
+    key: 'prep',
+    icon: '🔪',
+    label: 'Prep.'
+  }, {
+    key: 'tv',
+    icon: '📺',
+    label: 'TV'
+  }];
+
+  // Determine which role to highlight (from PIN match or manual selection)
+  const activeRole = matchedRole || selectedRole;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "login-bg"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-card fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "login-logo"
+  }, "\uD83C\uDF2F Top Lomitos"), /*#__PURE__*/React.createElement("div", {
+    className: "login-sub"
+  }, "Sistema de Gesti\xF3n \u2014 Since 1995"), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSubmit
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "role-grid"
+  }, roles.map(r => /*#__PURE__*/React.createElement("div", {
+    key: r.key,
+    className: `role-btn ${activeRole === r.key ? 'active' : ''}`,
+    onClick: () => setSelectedRole(r.key),
+    style: activeRole === r.key ? {
+      borderColor: 'var(--primary)',
+      background: 'var(--primary-light)',
+      transform: 'scale(1.05)',
+      transition: '.2s'
+    } : {
+      opacity: .6,
+      transition: '.2s'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "role-icon"
+  }, r.icon), /*#__PURE__*/React.createElement("div", {
+    className: "role-name",
+    style: activeRole === r.key ? {
+      color: 'var(--primary)',
+      fontWeight: 800
+    } : {}
+  }, r.label)))), matchedEmp && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--success)',
+      fontSize: '.85rem',
+      fontWeight: 700,
+      marginBottom: 8,
+      textAlign: 'center'
+    }
+  }, "\u2705 ", matchedEmp.name, " \u2014 ", ROLE_LABELS[matchedEmp.role]), /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    type: "password",
+    placeholder: "Ingres\xE1 tu PIN",
+    inputMode: "numeric",
+    pattern: "[0-9]*",
+    maxLength: 4,
+    value: pin,
+    onChange: e => {
+      setPin(e.target.value.replace(/\D/g, ''));
+      setError('');
+    },
+    autoFocus: true,
+    autoComplete: "off"
+  }), error && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: 'var(--danger)',
+      fontSize: '.85rem',
+      marginBottom: 12
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    className: "login-btn",
+    type: "submit",
+    style: matchedEmp ? {
+      background: 'var(--success)'
+    } : {}
+  }, matchedEmp ? `Ingresar como ${matchedEmp.name.split(' ')[0]}` : 'Ingresar')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 14,
+      fontSize: '.7rem',
+      color: 'var(--gray3)'
+    }
+  }, "Admin: 0000 | TV: 1234")));
+}
+
+// ============== DASHBOARD ==============
+// ============== TV DASHBOARD (Customer-facing) ==============
+function TVDashboard({orders, now, onExit}) {
+  const todayOrders = orders.filter(o => o.date === todayStr());
+  const pending = todayOrders.filter(o => o.status === 'pending');
+  const preparing = todayOrders.filter(o => o.status === 'preparing');
+  const ready = todayOrders.filter(o => o.status === 'ready' || o.status === 'served');
+  const paid = todayOrders.filter(o => o.status === 'paid');
+
+  function renderCard(o, borderColor, extraClass) {
+    return /*#__PURE__*/React.createElement("div", {
+      key: o._key || o.id,
+      className: "tv-order-card " + (extraClass || ''),
+      style: {borderLeftColor: borderColor}
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}
+    }, /*#__PURE__*/React.createElement("span", {className: "tv-order-num"}, "#", o.orderNum || '----'),
+    /*#__PURE__*/React.createElement("span", {className: "tv-order-type"}, ORDER_TYPES[o.type], o.tableNum ? ' #' + o.tableNum : '')),
+    o.vehicleDesc && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: '#f4a261', fontWeight: 600, marginTop: 4}}, "\uD83D\uDE97 ", o.vehicleDesc),
+    /*#__PURE__*/React.createElement("div", {className: "tv-order-items"},
+      ensureArray(o.items).map((it, i) => /*#__PURE__*/React.createElement("span", {key: i}, i > 0 ? ' · ' : '', it.qty, 'x ', it.name))),
+    /*#__PURE__*/React.createElement("div", {className: "tv-order-time"}, timeAgo(o.createdAt)));
+  }
+
+  return /*#__PURE__*/React.createElement("div", {className: "tv-dashboard"},
+    /*#__PURE__*/React.createElement("div", {className: "tv-header"},
+      /*#__PURE__*/React.createElement("div", {className: "tv-logo"}, "\uD83C\uDF2F Top Lomitos"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 16}},
+        /*#__PURE__*/React.createElement("div", {className: "tv-clock"}, now.toLocaleTimeString('es-PY', {hour: '2-digit', minute: '2-digit', second: '2-digit'})),
+        onExit && /*#__PURE__*/React.createElement("button", {
+          onClick: onExit,
+          style: {background: 'rgba(255,255,255,.1)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: '.8rem'}
+        }, "\u2715 Salir"))),
+    /*#__PURE__*/React.createElement("div", {className: "tv-stats"},
+      /*#__PURE__*/React.createElement("div", {className: "tv-stat"},
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-num", style: {color: '#f4a261'}}, pending.length),
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-label"}, "En Cola")),
+      /*#__PURE__*/React.createElement("div", {className: "tv-stat"},
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-num", style: {color: '#64b5f6'}}, preparing.length),
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-label"}, "Preparando")),
+      /*#__PURE__*/React.createElement("div", {className: "tv-stat"},
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-num", style: {color: '#81c784'}}, ready.length),
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-label"}, "Listos")),
+      /*#__PURE__*/React.createElement("div", {className: "tv-stat"},
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-num", style: {color: 'rgba(255,255,255,.4)'}}, paid.length),
+        /*#__PURE__*/React.createElement("div", {className: "tv-stat-label"}, "Entregados Hoy"))),
+    /*#__PURE__*/React.createElement("div", {className: "tv-columns"},
+      // Column 1: Pending
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {className: "tv-col-title", style: {background: 'rgba(244,162,97,.2)', color: '#f4a261'}}, "\u23F3 En Cola"),
+        pending.length === 0 ?
+          /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', opacity: .3, padding: 20, fontSize: '.9rem'}}, "Sin pedidos en cola") :
+          pending.map(o => renderCard(o, '#f4a261'))),
+      // Column 2: Preparing
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {className: "tv-col-title", style: {background: 'rgba(100,181,246,.2)', color: '#64b5f6'}}, "\uD83D\uDD25 Preparando"),
+        preparing.length === 0 ?
+          /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', opacity: .3, padding: 20, fontSize: '.9rem'}}, "Nada preparándose") :
+          preparing.map(o => renderCard(o, '#64b5f6'))),
+      // Column 3: Ready
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {className: "tv-col-title", style: {background: 'rgba(129,199,132,.2)', color: '#81c784'}}, "\u2705 Listos para Retirar"),
+        ready.length === 0 ?
+          /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', opacity: .3, padding: 20, fontSize: '.9rem'}}, "Ninguno listo aún") :
+          ready.map(o => renderCard(o, '#81c784', 'tv-ready')))));
+}
+
+function Dashboard({
+  orders,
+  activeOrders,
+  stock,
+  now,
+  dailySales,
+  onResetDay
+}) {
+  const [confirmReset, setConfirmReset] = useState(false);
+  const lowStock = stock.filter(s => s.qty <= s.min);
+  const paidToday = orders.filter(o => o.status === 'paid');
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      marginBottom: 16,
+      fontWeight: 800,
+      fontSize: '1.3rem'
+    }
+  }, "\uD83D\uDCCA Dashboard"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-grid"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon red"
+  }, "\uD83D\uDCDD"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, activeOrders.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Pedidos Activos"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon green"
+  }, "\uD83D\uDCB0"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: '1rem'
+    }
+  }, formatGs(dailySales)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Venta del D\xEDa"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon yellow"
+  }, "\uD83E\uDDFE"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, paidToday.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Cobrados"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon blue"
+  }, "\u26A0\uFE0F"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, lowStock.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Stock Bajo")))), /*#__PURE__*/React.createElement("div", {
+    className: "dashboard-2col",
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Pedidos Activos"), activeOrders.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--gray3)',
+      fontSize: '.85rem'
+    }
+  }, "Sin pedidos activos") : activeOrders.slice(0, 6).map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '8px 0',
+      borderBottom: '1px solid var(--gray)'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700
+    }
+  }, "#", o.orderNum || '----'), " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.75rem'
+    }
+  }, ORDER_TYPES[o.type])), /*#__PURE__*/React.createElement("span", {
+    className: `badge badge-${o.status}`
+  }, STATUS_LABEL[o.status] || o.status)))), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Alertas Stock"), lowStock.length === 0 ? /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--gray3)',
+      fontSize: '.85rem'
+    }
+  }, "Todo bien") : lowStock.map(s => /*#__PURE__*/React.createElement("div", {
+    key: s._key,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      padding: '8px 0',
+      borderBottom: '1px solid var(--gray)',
+      fontSize: '.85rem'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, s.name), /*#__PURE__*/React.createElement("span", {
+    className: "stock-low"
+  }, s.qty, " ", s.unit))))), onResetDay && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {marginTop: 20, border: '2px solid var(--danger)', background: '#fff5f5'}
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {color: 'var(--danger)', marginBottom: 8}
+  }, "\u26A0\uFE0F Zona Admin"), /*#__PURE__*/React.createElement("p", {
+    style: {fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}
+  }, "Borrar todos los pedidos del d\xEDa y resetear el contador. Ideal para empezar el d\xEDa limpio o borrar pruebas."), !confirmReset ? /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-danger",
+    onClick: () => setConfirmReset(true)
+  }, "\uD83D\uDDD1\uFE0F Resetear D\xEDa") : /*#__PURE__*/React.createElement("div", {
+    style: {background: '#fff', border: '2px solid var(--danger)', borderRadius: 10, padding: 16, textAlign: 'center'}
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {fontWeight: 700, fontSize: '.95rem', marginBottom: 12, color: 'var(--danger)'}
+  }, "\xBFEst\xE1s seguro? Se borrar\xE1n TODOS los pedidos de hoy y el contador vuelve a 0001."), /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', gap: 8, justifyContent: 'center'}
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-danger",
+    onClick: () => { onResetDay(); setConfirmReset(false); }
+  }, "\u2705 S\xED, resetear todo"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    onClick: () => setConfirmReset(false)
+  }, "Cancelar")))));
+}
+
+// ============== PEDIDOS ==============
+function PedidosPage({
+  user,
+  onAddOrder,
+  activeOrders,
+  onUpdateOrder
+}) {
+  const [cart, setCart] = useState([]);
+  const [catFilter, setCatFilter] = useState('lomitos');
+  const [orderType, setOrderType] = useState(user.role === 'mozo_exterior' ? 'vehiculo' : 'mesa');
+  const [tableNum, setTableNum] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [clientAddress, setClientAddress] = useState('');
+  const [vehicleDesc, setVehicleDesc] = useState('');
+  const [notes, setNotes] = useState('');
+  const [showPanel, setShowPanel] = useState(false);
+  const [showMyOrders, setShowMyOrders] = useState(false);
+  const [addingToOrder, setAddingToOrder] = useState(null); // order being edited
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customPrice, setCustomPrice] = useState('');
+  const [panelMinimized, setPanelMinimized] = useState(false);
+  const items = MENU_DATA.find(c => c.id === catFilter)?.items || [];
+  function addCustomProduct() {
+    if (!customName.trim() || !customPrice.trim()) return;
+    const price = parseInt(customPrice, 10);
+    if (isNaN(price) || price <= 0) return;
+    const customItem = {
+      id: 'custom_' + Date.now(),
+      name: customName.trim(),
+      price: price,
+      qty: 1
+    };
+    setCart(prev => [...prev, customItem]);
+    setCustomName('');
+    setCustomPrice('');
+    setShowCustomForm(false);
+  }
+  function addToCart(item) {
+    setCart(prev => {
+      const ex = prev.find(c => c.id === item.id);
+      if (ex) return prev.map(c => c.id === item.id ? {
+        ...c,
+        qty: c.qty + 1
+      } : c);
+      return [...prev, {
+        ...item,
+        qty: 1
+      }];
+    });
+  }
+  function updateQty(id, d) {
+    setCart(prev => prev.map(c => c.id === id ? {
+      ...c,
+      qty: Math.max(0, c.qty + d)
+    } : c).filter(c => c.qty > 0));
+  }
+  function cartTotal() {
+    return cart.reduce((s, c) => s + c.price * c.qty, 0);
+  }
+  function cartCount() {
+    return cart.reduce((s, c) => s + c.qty, 0);
+  }
+  function startAddToOrder(order) {
+    setAddingToOrder(order);
+    setCart([]);
+    setCatFilter('lomitos');
+    setShowMyOrders(false);
+    setShowPanel(false);
+  }
+  function submitOrder() {
+    if (cart.length === 0) return;
+    if (addingToOrder) {
+      // Create a new ORDER with agregado instead of updating the old one
+      const parentOrderNum = addingToOrder.orderNum || '----';
+      onAddOrder({
+        type: addingToOrder.type,
+        tableNum: addingToOrder.tableNum,
+        clientName: addingToOrder.clientName,
+        clientPhone: addingToOrder.clientPhone,
+        clientAddress: addingToOrder.clientAddress,
+        vehicleDesc: addingToOrder.vehicleDesc,
+        notes: 'Agregado a #' + parentOrderNum + ': ' + cart.map(c => c.qty + 'x ' + c.name).join(', '),
+        items: cart.map(c => ({
+          id: c.id,
+          name: c.name,
+          price: c.price,
+          qty: c.qty
+        })),
+        total: cartTotal(),
+        waiter: user.name,
+        parentOrderNum: parentOrderNum,
+        isAgregado: true
+      });
+      setAddingToOrder(null);
+      setCart([]);
+      setShowPanel(false);
+      setShowMyOrders(true);
+      return;
+    }
+    onAddOrder({
+      type: orderType,
+      tableNum,
+      clientName,
+      clientPhone,
+      clientAddress,
+      vehicleDesc,
+      notes,
+      items: cart.map(c => ({
+        id: c.id,
+        name: c.name,
+        price: c.price,
+        qty: c.qty
+      })),
+      total: cartTotal(),
+      waiter: user.name
+    });
+    setCart([]);
+    setTableNum('');
+    setClientName('');
+    setClientPhone('');
+    setClientAddress('');
+    setVehicleDesc('');
+    setNotes('');
+    setShowPanel(false);
+  }
+  const myOrders = activeOrders.filter(o => o.waiter === user.name);
+  const myReadyCount = myOrders.filter(o => o.status === 'ready').length;
+  if (showMyOrders) return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      fontSize: '1.2rem'
+    }
+  }, "Mis Pedidos (", myOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => setShowMyOrders(false)
+  }, "\u2190 Volver")), myReadyCount > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card fade-in",
+    style: {
+      background: 'var(--success-light)',
+      border: '2px solid var(--success)',
+      padding: 14,
+      marginBottom: 14,
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '1.1rem',
+      fontWeight: 800,
+      color: 'var(--success)'
+    }
+  }, "\uD83C\uDF89 ", myReadyCount, " pedido", myReadyCount > 1 ? 's' : '', " LISTO", myReadyCount > 1 ? 'S' : '', "!")), /*#__PURE__*/React.createElement("div", {
+    className: "kitchen-grid"
+  }, myOrders.sort((a, b) => {
+    const priority = {
+      ready: 0,
+      preparing: 1,
+      pending: 2,
+      awaiting_payment: 3,
+      served: 4
+    };
+    return (priority[a.status] || 9) - (priority[b.status] || 9);
+  }).map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key || o.id,
+    className: `kitchen-card ${o.status === 'ready' ? 'ready' : o.status}`,
+    style: o.status === 'ready' ? {
+      border: '2px solid var(--success)',
+      animation: 'pulse 1.5s infinite'
+    } : {}
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "kc-header"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-order-num"
+  }, "#", o.orderNum || '----'), /*#__PURE__*/React.createElement("span", {
+    className: `badge badge-${o.status}`
+  }, STATUS_LABEL[o.status] || o.status)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-type"
+  }, ORDER_TYPES[o.type]), o.tableNum && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 8,
+      fontWeight: 600
+    }
+  }, "#", o.tableNum)), o.vehicleDesc && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark)',
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDE97 ", o.vehicleDesc), o.clientName && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark2)',
+      marginBottom: 4
+    }
+  }, "\uD83D\uDC64 ", o.clientName, " ", o.clientPhone ? '📞 ' + o.clientPhone : ''), /*#__PURE__*/React.createElement("ul", {
+    className: "kc-items",
+    style: {
+      marginTop: 4
+    }
+  }, ensureArray(o.items).map((it, i) => /*#__PURE__*/React.createElement("li", {
+    key: i
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "qty"
+  }, it.qty, "x"), " ", it.name)))), o.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--gray3)',
+      fontStyle: 'italic',
+      marginBottom: 6
+    }
+  }, "\uD83D\uDCCC ", o.notes), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4,
+      marginBottom: 8,
+      marginTop: 6
+    }
+  }, ['pending', 'preparing', 'ready'].map(s => /*#__PURE__*/React.createElement("div", {
+    key: s,
+    style: {
+      flex: 1,
+      height: 4,
+      borderRadius: 2,
+      background: s === 'pending' ? o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served' ? 'var(--secondary)' : 'var(--gray)' : s === 'preparing' ? o.status === 'preparing' || o.status === 'ready' || o.status === 'served' ? '#1976d2' : 'var(--gray)' : o.status === 'ready' || o.status === 'served' ? 'var(--success)' : 'var(--gray)'
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.7rem',
+      color: 'var(--gray3)',
+      textAlign: 'center',
+      marginBottom: 8
+    }
+  }, o.status === 'awaiting_payment' ? '⏳ Esperando pago en caja...' : o.status === 'pending' ? '📋 En cola de cocina...' : o.status === 'preparing' ? '🔥 Preparándose...' : o.status === 'ready' ? '✅ ¡LISTO para entregar!' : o.status === 'served' ? '🍽️ Entregado' : ''), o.status === 'ready' && o.type === 'mesa' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-block btn-sm",
+    onClick: () => onUpdateOrder(o.id, {
+      status: 'served'
+    })
+  }, "\uD83C\uDF7D\uFE0F Marcar como Servido"), o.status === 'ready' && o.type !== 'mesa' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-block btn-sm",
+    onClick: () => onUpdateOrder(o.id, {
+      status: 'served'
+    })
+  }, "\u2705 Entregado"), (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served') && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-warning btn-block btn-sm",
+    style: {marginTop: 6},
+    onClick: () => startAddToOrder(o)
+  }, "\u2795 Agregar Items"))), myOrders.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--gray3)'
+    }
+  }, "Sin pedidos activos")));
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+      flexWrap: 'wrap',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      fontSize: '1.2rem'
+    }
+  }, addingToOrder ? "\u2795 Agregar a Pedido #" + (addingToOrder.orderNum || '----') : "\uD83D\uDCDD Nuevo Pedido"), addingToOrder && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => { setAddingToOrder(null); setCart([]); }
+  }, "\u2715 Cancelar"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    onClick: () => setShowMyOrders(true),
+    style: myReadyCount > 0 ? {
+      background: 'var(--success)',
+      color: '#fff',
+      animation: 'pulse 1.5s infinite'
+    } : {
+      background: 'transparent',
+      border: '2px solid var(--gray)',
+      color: 'var(--gray3)'
+    }
+  }, "\uD83D\uDCCB Mis Pedidos (", myOrders.length, ")", myReadyCount > 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: '#fff',
+      color: 'var(--success)',
+      padding: '1px 6px',
+      borderRadius: 10,
+      fontSize: '.7rem',
+      fontWeight: 800,
+      marginLeft: 6
+    }
+  }, myReadyCount, " LISTO", myReadyCount > 1 ? 'S' : '')))), /*#__PURE__*/React.createElement("div", {
+    className: "menu-cats",
+    style: {
+      marginBottom: 8
+    }
+  }, ['mesa', 'vehiculo', 'delivery', 'carry_out'].map(t => /*#__PURE__*/React.createElement("button", {
+    key: t,
+    className: `cat-btn ${orderType === t ? 'active' : ''}`,
+    onClick: () => setOrderType(t),
+    style: orderType === t ? {
+      background: 'var(--dark)',
+      borderColor: 'var(--dark)'
+    } : {}
+  }, ORDER_TYPES[t]))), orderType === 'mesa' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "# Mesa",
+    value: tableNum,
+    onChange: e => setTableNum(e.target.value),
+    style: {
+      maxWidth: 120,
+      marginBottom: 0,
+      padding: '8px 12px'
+    }
+  })), orderType === 'vehiculo' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginBottom: 10,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "\uD83D\uDE97 Chapa / Modelo / Color del veh\xEDculo",
+    value: vehicleDesc,
+    onChange: e => setVehicleDesc(e.target.value),
+    style: {
+      flex: '1 1 100%',
+      marginBottom: 0,
+      padding: '8px 12px'
+    }
+  })), orderType === 'delivery' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginBottom: 10,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "Nombre",
+    value: clientName,
+    onChange: e => setClientName(e.target.value),
+    style: {
+      flex: 1,
+      minWidth: 120,
+      marginBottom: 0,
+      padding: '8px 12px'
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "Tel\xE9fono",
+    value: clientPhone,
+    onChange: e => setClientPhone(e.target.value),
+    style: {
+      flex: 1,
+      minWidth: 120,
+      marginBottom: 0,
+      padding: '8px 12px'
+    }
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "Direcci\xF3n",
+    value: clientAddress,
+    onChange: e => setClientAddress(e.target.value),
+    style: {
+      flex: '1 1 100%',
+      marginBottom: 0,
+      padding: '8px 12px'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "menu-cats"
+  }, MENU_DATA.map(c => /*#__PURE__*/React.createElement("button", {
+    key: c.id,
+    className: `cat-btn ${catFilter === c.id ? 'active' : ''}`,
+    onClick: () => setCatFilter(c.id)
+  }, c.icon, " ", c.name))), /*#__PURE__*/React.createElement("div", {
+    className: "menu-grid"
+  }, items.map(item => /*#__PURE__*/React.createElement("div", {
+    key: item.id,
+    className: "menu-item",
+    onClick: () => addToCart(item)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mi-name"
+  }, item.name), /*#__PURE__*/React.createElement("div", {
+    className: "mi-price"
+  }, formatGs(item.price)))), catFilter === 'personalizado' && /*#__PURE__*/React.createElement("button", {
+    className: "menu-item",
+    style: {
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '1.5rem',
+      minHeight: '100px'
+    },
+    onClick: () => setShowCustomForm(!showCustomForm)
+  }, "➕ Agregar Item")), showCustomForm && catFilter === 'personalizado' && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 10,
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Nombre del Producto"), /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    placeholder: "Ej: Milanesa especial",
+    value: customName,
+    onChange: e => setCustomName(e.target.value),
+    style: {
+      padding: '8px 12px'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Precio (Gs.)"), /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    type: "number",
+    placeholder: "0",
+    value: customPrice,
+    onChange: e => setCustomPrice(e.target.value),
+    style: {
+      padding: '8px 12px'
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    onClick: addCustomProduct
+  }, "\u2705 Agregar")), cartCount() > 0 && /*#__PURE__*/React.createElement("button", {
+    className: "fab-cart",
+    onClick: () => setShowPanel(true)
+  }, "\uD83D\uDED2", /*#__PURE__*/React.createElement("span", {
+    className: "fab-badge"
+  }, cartCount())), (showPanel || cartCount() > 0) && /*#__PURE__*/React.createElement("div", {
+    className: `order-panel ${window.innerWidth <= 768 ? 'slide-up' : ''}`,
+    style: window.innerWidth > 768 ? {width: panelMinimized ? '50px' : '340px', transition: 'width 0.3s ease'} : {display: showPanel ? 'flex' : 'none'}
+  }, window.innerWidth > 768 && panelMinimized ? /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'space-between', height: '100%', padding: '8px 0', cursor: 'pointer'}, onClick: () => setPanelMinimized(false)}, /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.2rem', writingMode: 'vertical-rl', transform: 'rotate(180deg)'}}, cartCount()), /*#__PURE__*/React.createElement("div", {style: {fontSize: '.6rem', fontWeight: 700}}, formatGs(cartTotal()).replace('Gs. ', ''))) : /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', height: '100%'}}, /*#__PURE__*/React.createElement("div", {
+    className: "order-header"
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700
+    }
+  }, addingToOrder ? "\u2795 Agregar a #" + (addingToOrder.orderNum || '----') + " (" + cartCount() + ")" : "\uD83D\uDED2 Pedido (" + cartCount() + ")"), window.innerWidth > 768 && /*#__PURE__*/React.createElement("button", {className: "btn btn-outline btn-sm", onClick: () => setPanelMinimized(true), style: {marginRight: 4}}, "\u25C0"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => setShowPanel(false)
+  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '8px 16px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-preparing"
+  }, ORDER_TYPES[orderType], tableNum ? ` #${tableNum}` : '')), /*#__PURE__*/React.createElement("div", {
+    className: "order-items"
+  }, cart.map(c => /*#__PURE__*/React.createElement("div", {
+    key: c.id,
+    className: "order-item"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "oi-info"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "oi-name"
+  }, c.name), /*#__PURE__*/React.createElement("div", {
+    className: "oi-price"
+  }, formatGs(c.price))), /*#__PURE__*/React.createElement("div", {
+    className: "oi-qty"
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => updateQty(c.id, -1)
+  }, "\u2212"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      minWidth: 20,
+      textAlign: 'center'
+    }
+  }, c.qty), /*#__PURE__*/React.createElement("button", {
+    onClick: () => updateQty(c.id, 1)
+  }, "+"))))), /*#__PURE__*/React.createElement("div", {
+    className: "order-footer"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "form-group",
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    placeholder: "Notas especiales...",
+    value: notes,
+    onChange: e => setNotes(e.target.value),
+    style: {
+      padding: '8px 12px',
+      border: '1px solid var(--gray)',
+      borderRadius: 8,
+      width: '100%',
+      fontFamily: 'inherit',
+      fontSize: '.85rem'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "order-total"
+  }, /*#__PURE__*/React.createElement("span", null, "Total"), /*#__PURE__*/React.createElement("span", null, formatGs(cartTotal()))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-block",
+    onClick: submitOrder
+  }, addingToOrder ? "\u2705 Agregar a Pedido #" + (addingToOrder.orderNum || '----') : "\u2705 Enviar Pedido")))));
+}
+
+// ============== COCINA ==============
+function CocinaPage({
+  orders,
+  onUpdateOrder
+}) {
+  const pending = orders.filter(o => o.status === 'pending');
+  const preparing = orders.filter(o => o.status === 'preparing');
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      marginBottom: 14,
+      fontSize: '1.2rem'
+    }
+  }, "\uD83D\uDC68\u200D\uD83C\uDF73 Cocina"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-pending",
+    style: {
+      fontSize: '.8rem',
+      padding: '6px 12px'
+    }
+  }, "\u23F3 Pendientes: ", pending.length), /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-preparing",
+    style: {
+      fontSize: '.8rem',
+      padding: '6px 12px'
+    }
+  }, "\uD83D\uDD25 Preparando: ", preparing.length)), /*#__PURE__*/React.createElement("div", {
+    className: "kitchen-grid"
+  }, pending.map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key || o.id,
+    className: "kitchen-card pending fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "kc-header"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-order-num"
+  }, "#", o.orderNum || '----'), /*#__PURE__*/React.createElement("span", {
+    className: "kc-time"
+  }, timeAgo(o.createdAt))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-type"
+  }, ORDER_TYPES[o.type]), o.tableNum && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 6,
+      fontWeight: 600,
+      fontSize: '.85rem'
+    }
+  }, "#", o.tableNum)), o.waiter && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--dark2)',
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDC64 ", o.waiter), o.vehicleDesc && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark)',
+      fontWeight: 700,
+      marginBottom: 6,
+      padding: '4px 8px',
+      background: '#fff3cd',
+      borderRadius: 6
+    }
+  }, "\uD83D\uDE97 ", o.vehicleDesc), o.clientName && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--dark2)',
+      marginBottom: 4
+    }
+  }, "\uD83D\uDCDE ", o.clientName, " ", o.clientPhone || ''), /*#__PURE__*/React.createElement("ul", {
+    className: "kc-items"
+  }, ensureArray(o.items).map((it, i) => /*#__PURE__*/React.createElement("li", {
+    key: i
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "qty"
+  }, it.qty, "x"), " ", it.name)))), o.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--gray3)',
+      fontStyle: 'italic',
+      marginBottom: 8
+    }
+  }, "\uD83D\uDCCC ", o.notes), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-warning btn-block",
+    onClick: () => {
+      onUpdateOrder(o.id, {status: 'preparing'});
+      printKitchenTicket(o);
+    }
+  }, "\uD83D\uDD25 Preparar"))), preparing.map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key || o.id,
+    className: "kitchen-card preparing fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "kc-header"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-order-num"
+  }, "#", o.orderNum || '----'), /*#__PURE__*/React.createElement("span", {
+    className: "kc-time pulse"
+  }, timeAgo(o.createdAt))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 4
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "kc-type"
+  }, ORDER_TYPES[o.type]), o.tableNum && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 6,
+      fontWeight: 600
+    }
+  }, "#", o.tableNum)), o.waiter && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--dark2)',
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDC64 ", o.waiter), o.vehicleDesc && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark)',
+      fontWeight: 700,
+      marginBottom: 6,
+      padding: '4px 8px',
+      background: '#fff3cd',
+      borderRadius: 6
+    }
+  }, "\uD83D\uDE97 ", o.vehicleDesc), /*#__PURE__*/React.createElement("ul", {
+    className: "kc-items"
+  }, ensureArray(o.items).map((it, i) => /*#__PURE__*/React.createElement("li", {
+    key: i
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    className: "qty"
+  }, it.qty, "x"), " ", it.name)))), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-block",
+    onClick: () => onUpdateOrder(o.id, {
+      status: 'ready'
+    })
+  }, "\u2705 Listo!"))), orders.length === 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      gridColumn: '1/-1',
+      textAlign: 'center',
+      padding: 40
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '1.1rem',
+      color: 'var(--gray3)'
+    }
+  }, "\uD83C\uDF89 Sin pedidos pendientes"))));
+}
+
+// ============== CAJA ==============
+function CajaPage({
+  orders,
+  onUpdateOrder,
+  onDeleteOrder,
+  dailySales,
+  userRole
+}) {
+  const [filter, setFilter] = useState('awaiting');
+  const awaitingOrders = orders.filter(o => o.status === 'awaiting_payment');
+  const readyOrders = orders.filter(o => o.status === 'ready' || o.status === 'served');
+  const allActive = orders.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
+  const paidToday = orders.filter(o => o.status === 'paid');
+  const cancelledOrders = orders.filter(o => o.status === 'cancelled');
+  const [receiptOrder, setReceiptOrder] = useState(null);
+  const [editOrder, setEditOrder] = useState(null);
+  const [editNotes, setEditNotes] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const isAdmin = userRole === 'admin';
+  // Group unpaid orders by mesa/vehicle for "Por Mesa" view
+  const mesaGroups = useMemo(() => {
+    const unpaid = orders.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
+    const groups = {};
+    unpaid.forEach(o => {
+      const key = o.tableNum ? 'mesa_' + o.tableNum : o.vehicleDesc ? 'vehiculo_' + o.vehicleDesc : null;
+      if (key) {
+        if (!groups[key]) groups[key] = {key, label: o.tableNum ? 'Mesa #' + o.tableNum : '🚗 ' + o.vehicleDesc, orders: [], total: 0};
+        groups[key].orders.push(o);
+        groups[key].total += (o.total || 0);
+      }
+    });
+    return Object.values(groups).filter(g => g.orders.length > 0);
+  }, [orders]);
+  const shown = filter === 'awaiting' ? awaitingOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      marginBottom: 14,
+      fontSize: '1.2rem'
+    }
+  }, "\uD83D\uDCB0 Caja"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-grid",
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon green"
+  }, "\uD83D\uDCB5"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: '1rem'
+    }
+  }, formatGs(dailySales)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Hoy"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon yellow"
+  }, "\uD83E\uDDFE"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, paidToday.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Facturas"))), awaitingOrders.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    style: {
+      gridColumn: 'span 2',
+      border: '2px solid var(--danger)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon red"
+  }, "\uD83D\uDE97"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, awaitingOrders.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Veh\xEDculo - Cobrar YA"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card",
+    style: {
+      gridColumn: 'span 2'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon red"
+  }, "\u23F3"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, readyOrders.length), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Por Cobrar")))), /*#__PURE__*/React.createElement("div", {
+    className: "menu-cats",
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'awaiting' ? 'active' : ''}`,
+    onClick: () => setFilter('awaiting'),
+    style: awaitingOrders.length > 0 ? {
+      background: 'var(--danger)',
+      color: '#fff',
+      borderColor: 'var(--danger)'
+    } : {}
+  }, "\uD83D\uDE97 Veh\xEDculo (", awaitingOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'ready' ? 'active' : ''}`,
+    onClick: () => setFilter('ready')
+  }, "Por Cobrar (", readyOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'active' ? 'active' : ''}`,
+    onClick: () => setFilter('active')
+  }, "Activos"), /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'paid' ? 'active' : ''}`,
+    onClick: () => setFilter('paid')
+  }, "Cobrados"), isAdmin && /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'cancelled' ? 'active' : ''}`,
+    onClick: () => setFilter('cancelled')
+  }, "Anulados"), /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'mesa' ? 'active' : ''}`,
+    onClick: () => setFilter('mesa'),
+    style: filter === 'mesa' ? {background: 'var(--dark)', color: '#fff', borderColor: 'var(--dark)'} : {}
+  }, "\uD83C\uDF7D\uFE0F Por Mesa (", mesaGroups.length, ")")),
+  filter === 'mesa' ? mesaGroups.map(g => /*#__PURE__*/React.createElement("div", {
+    key: g.key,
+    className: "card",
+    style: {padding: 16, border: '2px solid var(--dark2)', marginBottom: 14}
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {fontWeight: 800, fontSize: '1.1rem'}
+  }, g.label), /*#__PURE__*/React.createElement("span", {
+    style: {fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary)'}
+  }, "Total: ", formatGs(g.total))), g.orders.map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key || o.id,
+    style: {padding: '8px 0', borderBottom: '1px solid var(--gray)', fontSize: '.85rem'}
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "#", o.orderNum || '----'), " ", o.isAgregado ? '(Agregado)' : '', " — ", ensureArray(o.items).map(i => i.qty + 'x ' + i.name).join(' · ')), /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(o.total))))), /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', gap: 8, marginTop: 10}
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success",
+    style: {flex: 1},
+    onClick: () => {
+      g.orders.forEach(o => onUpdateOrder(o.id, {status: 'paid'}));
+      setReceiptOrder({...g.orders[0], items: g.orders.flatMap(o => ensureArray(o.items)), total: g.total, orderNum: g.label});
+    }
+  }, "\uD83D\uDCB5 Cobrar Todo (", formatGs(g.total), ")")))) :
+  shown.map(o => /*#__PURE__*/React.createElement("div", {
+    key: o._key || o.id,
+    className: "card",
+    style: {
+      padding: 14,
+      border: o.status === 'awaiting_payment' ? '2px solid var(--danger)' : o.status === 'cancelled' ? '2px solid var(--gray2)' : 'none',
+      opacity: o.status === 'cancelled' ? .6 : 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800
+    }
+  }, "#", o.orderNum || '----'), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 8,
+      fontSize: '.8rem'
+    }
+  }, ORDER_TYPES[o.type]), o.tableNum && /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: 4,
+      fontWeight: 600,
+      fontSize: '.85rem'
+    }
+  }, "#", o.tableNum)), /*#__PURE__*/React.createElement("span", {
+    className: `badge badge-${o.status}`
+  }, STATUS_LABEL[o.status] || o.status)), o.waiter && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark2)',
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDC64 ", o.waiter), o.vehicleDesc && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--dark)',
+      fontWeight: 700,
+      marginBottom: 4
+    }
+  }, "\uD83D\uDE97 ", o.vehicleDesc), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.82rem',
+      color: 'var(--gray3)',
+      marginBottom: 4
+    }
+  }, ensureArray(o.items).map(i => `${i.qty}x ${i.name}`).join(' · ')), o.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.78rem',
+      color: 'var(--gray3)',
+      fontStyle: 'italic',
+      marginBottom: 4
+    }
+  }, "\uD83D\uDCCC ", o.notes), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      fontSize: '1.05rem'
+    }
+  }, formatGs(o.total)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      flexWrap: 'wrap',
+      justifyContent: 'flex-end'
+    }
+  }, o.status === 'awaiting_payment' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    style: {
+      background: 'var(--danger)',
+      color: '#fff',
+      fontWeight: 700
+    },
+    onClick: () => {
+      onUpdateOrder(o.id, {
+        status: 'pending'
+      });
+      setReceiptOrder({
+        ...o,
+        status: 'paid'
+      });
+    }
+  }, "\uD83D\uDE97 Cobrar y Enviar"), (o.status === 'ready' || o.status === 'served') && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-sm",
+    onClick: () => {
+      onUpdateOrder(o.id, {
+        status: 'paid'
+      });
+      setReceiptOrder(o);
+    }
+  }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => setReceiptOrder(o)
+  }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => {
+      setEditOrder(o);
+      setEditNotes(o.notes || '');
+    }
+  }, "\u270F\uFE0F"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    style: {
+      color: 'var(--danger)'
+    },
+    onClick: () => onUpdateOrder(o.id, {
+      status: 'cancelled'
+    })
+  }, "\u2715 Anular"), isAdmin && o.status === 'cancelled' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    style: {
+      color: 'var(--danger)'
+    },
+    onClick: () => setConfirmDelete(o)
+  }, "\uD83D\uDDD1\uFE0F Eliminar"), isAdmin && o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    style: {
+      color: 'var(--danger)'
+    },
+    onClick: () => setConfirmDelete(o)
+  }, "\uD83D\uDDD1\uFE0F"))))), shown.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      textAlign: 'center',
+      color: 'var(--gray3)',
+      marginTop: 30
+    }
+  }, "Sin pedidos"), editOrder && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setEditOrder(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-handle"
+  }), /*#__PURE__*/React.createElement("h3", null, "\u270F\uFE0F Editar Pedido #", editOrder.orderNum || '----'), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.85rem',
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, "Tipo:"), " ", ORDER_TYPES[editOrder.type], editOrder.tableNum ? ` #${editOrder.tableNum}` : ''), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, "Mozo:"), " ", editOrder.waiter), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, "Total:"), " ", formatGs(editOrder.total))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: '.85rem',
+      marginBottom: 6
+    }
+  }, "Items:"), ensureArray(editOrder.items).map((it, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: '6px 0',
+      borderBottom: '1px solid var(--gray)'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.85rem'
+    }
+  }, it.qty, "x ", it.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.85rem',
+      fontWeight: 600
+    }
+  }, formatGs(it.price * it.qty))))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Notas / Observaciones"), /*#__PURE__*/React.createElement("textarea", {
+    rows: 3,
+    value: editNotes,
+    onChange: e => setEditNotes(e.target.value),
+    style: {
+      width: '100%',
+      padding: 10,
+      border: '2px solid var(--gray)',
+      borderRadius: 8,
+      fontFamily: 'inherit',
+      fontSize: '.85rem'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      flex: 1
+    },
+    onClick: () => {
+      onUpdateOrder(editOrder.id, {
+        notes: editNotes
+      });
+      setEditOrder(null);
+    }
+  }, "\uD83D\uDCBE Guardar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {
+      flex: 1
+    },
+    onClick: () => setEditOrder(null)
+  }, "Cancelar")))), confirmDelete && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setConfirmDelete(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 400
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-handle"
+  }), /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: 'var(--danger)'
+    }
+  }, "\u26A0\uFE0F Eliminar Pedido"), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.9rem',
+      marginBottom: 16
+    }
+  }, "\xBFEst\xE1s seguro que quer\xE9s eliminar el pedido ", /*#__PURE__*/React.createElement("b", null, "#", confirmDelete.orderNum || '----'), "? Esta acci\xF3n no se puede deshacer."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-danger",
+    style: {
+      flex: 1
+    },
+    onClick: () => {
+      onDeleteOrder(confirmDelete.id);
+      setConfirmDelete(null);
+    }
+  }, "\uD83D\uDDD1\uFE0F S\xED, eliminar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {
+      flex: 1
+    },
+    onClick: () => setConfirmDelete(null)
+  }, "Cancelar")))), receiptOrder && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setReceiptOrder(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation(),
+    style: {
+      maxWidth: 360,
+      fontFamily: 'monospace'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-handle"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '1.2rem',
+      fontWeight: 800
+    }
+  }, "\uD83C\uDF2F TOP LOMITOS"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.75rem'
+    }
+  }, "Since 1995"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.75rem'
+    }
+  }, "Tel: (0973) 505768 / (0973) 884414"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderBottom: '1px dashed #999',
+      margin: '8px 0'
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '.75rem',
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("div", null, "Pedido: #", receiptOrder.orderNum || '----'), /*#__PURE__*/React.createElement("div", null, "Tipo: ", ORDER_TYPES[receiptOrder.type], receiptOrder.tableNum ? ` #${receiptOrder.tableNum}` : ''), /*#__PURE__*/React.createElement("div", null, "Mozo: ", receiptOrder.waiter), receiptOrder.vehicleDesc && /*#__PURE__*/React.createElement("div", null, "Veh\xEDculo: ", receiptOrder.vehicleDesc), /*#__PURE__*/React.createElement("div", null, "Fecha: ", new Date(receiptOrder.createdAt).toLocaleString('es-PY'))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderBottom: '1px dashed #999',
+      margin: '6px 0'
+    }
+  }), ensureArray(receiptOrder.items).map((it, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontSize: '.8rem',
+      padding: '2px 0'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, it.qty, "x ", it.name), /*#__PURE__*/React.createElement("span", null, formatGs(it.price * it.qty)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderBottom: '1px dashed #999',
+      margin: '6px 0'
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      fontWeight: 800,
+      fontSize: '1rem'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "TOTAL"), /*#__PURE__*/React.createElement("span", null, formatGs(receiptOrder.total))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      marginTop: 12,
+      fontSize: '.7rem',
+      color: 'var(--gray3)'
+    }
+  }, "\xA1Gracias por la preferencia!"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      flex: 1
+    },
+    onClick: () => printTicket(receiptOrder)
+  }, "\uD83D\uDDA8\uFE0F Imprimir"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {
+      flex: 1
+    },
+    onClick: () => setReceiptOrder(null)
+  }, "Cerrar")))));
+}
+
+// ============== STOCK ==============
+function StockPage({
+  stock,
+  updateStock,
+  removeStockItem
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [form, setForm] = useState({
+    name: '',
+    qty: '',
+    unit: 'kg',
+    min: '',
+    max: ''
+  });
+  function openAdd() {
+    setEditItem(null);
+    setForm({
+      name: '',
+      qty: '',
+      unit: 'kg',
+      min: '',
+      max: ''
+    });
+    setShowModal(true);
+  }
+  function openEdit(item) {
+    setEditItem(item);
+    setForm({
+      name: item.name,
+      qty: '' + item.qty,
+      unit: item.unit,
+      min: '' + item.min,
+      max: '' + item.max
+    });
+    setShowModal(true);
+  }
+  function saveItem() {
+    const d = {
+      name: form.name,
+      qty: +form.qty,
+      unit: form.unit,
+      min: +form.min,
+      max: +form.max
+    };
+    if (editItem) {
+      fbUpdate('stock/' + (editItem._key || editItem.id), d);
+    } else {
+      const newId = Date.now();
+      fbSet('stock/' + newId, {
+        ...d,
+        id: newId
+      });
+    }
+    setShowModal(false);
+  }
+  function adjustQty(item, d) {
+    fbUpdate('stock/' + (item._key || item.id), {
+      qty: Math.max(0, item.qty + d)
+    });
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      fontSize: '1.2rem'
+    }
+  }, "\uD83D\uDCE6 Stock"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-sm",
+    onClick: openAdd
+  }, "+ Nuevo")), stock.map(s => {
+    const pct = Math.min(100, s.qty / s.max * 100);
+    const isLow = s.qty <= s.min;
+    return /*#__PURE__*/React.createElement("div", {
+      key: s._key || s.id,
+      className: "card",
+      style: {
+        padding: 12,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 600,
+        fontSize: '.85rem'
+      }
+    }, s.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: isLow ? 'stock-low' : 'stock-ok',
+      style: {
+        fontSize: '.9rem'
+      }
+    }, s.qty, " ", s.unit), /*#__PURE__*/React.createElement("div", {
+      className: "stock-bar",
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "stock-fill",
+      style: {
+        width: pct + '%',
+        background: isLow ? 'var(--danger)' : pct < 50 ? 'var(--secondary)' : 'var(--success)'
+      }
+    })))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: 4,
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      onClick: () => adjustQty(s, -1)
+    }, "\u2212"), /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      onClick: () => adjustQty(s, 1)
+    }, "+"), /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      onClick: () => openEdit(s)
+    }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      style: {
+        color: 'var(--danger)'
+      },
+      onClick: () => {
+        if (confirm('¿Eliminar ' + s.name + '?')) removeStockItem(s._key || s.id);
+      }
+    }, "\uD83D\uDDD1\uFE0F")));
+  }), showModal && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setShowModal(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-handle"
+  }), /*#__PURE__*/React.createElement("h3", null, editItem ? 'Editar' : 'Nuevo', " Producto"), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Nombre"), /*#__PURE__*/React.createElement("input", {
+    value: form.name,
+    onChange: e => setForm({
+      ...form,
+      name: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Cantidad"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    value: form.qty,
+    onChange: e => setForm({
+      ...form,
+      qty: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Unidad"), /*#__PURE__*/React.createElement("select", {
+    value: form.unit,
+    onChange: e => setForm({
+      ...form,
+      unit: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "kg"
+  }, "kg"), /*#__PURE__*/React.createElement("option", {
+    value: "lt"
+  }, "lt"), /*#__PURE__*/React.createElement("option", {
+    value: "u"
+  }, "unid"), /*#__PURE__*/React.createElement("option", {
+    value: "paq"
+  }, "paq"))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "M\xEDnimo"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    value: form.min,
+    onChange: e => setForm({
+      ...form,
+      min: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "M\xE1ximo"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    inputMode: "numeric",
+    value: form.max,
+    onChange: e => setForm({
+      ...form,
+      max: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      flex: 1
+    },
+    onClick: saveItem
+  }, "Guardar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {
+      flex: 1
+    },
+    onClick: () => setShowModal(false)
+  }, "Cancelar")))));
+}
+
+// ============== MARCACIÓN ==============
+function MarcacionPage({
+  employees,
+  clockRecords,
+  addClockRecord,
+  updateClockRecord,
+  now
+}) {
+  const [pin, setPin] = useState('');
+  const [message, setMessage] = useState(null);
+  function handleClock() {
+    const emp = employees.find(e => e.pin === pin);
+    if (!emp) {
+      setMessage({
+        type: 'error',
+        text: 'PIN no encontrado'
+      });
+      setPin('');
+      return;
+    }
+    const today = now.toDateString();
+    const existing = clockRecords.find(r => r.employeeId === emp.id && r.date === today && !r.clockOut);
+    if (existing) {
+      updateClockRecord(existing._key, {
+        clockOut: now.toISOString()
+      });
+      setMessage({
+        type: 'out',
+        text: `👋 Salida: ${emp.name} — ${now.toLocaleTimeString('es-PY', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}`
+      });
+    } else {
+      addClockRecord({
+        employeeId: emp.id,
+        employeeName: emp.name,
+        role: emp.role,
+        clockIn: now.toISOString(),
+        clockOut: null,
+        date: today
+      });
+      setMessage({
+        type: 'in',
+        text: `✅ Entrada: ${emp.name} — ${now.toLocaleTimeString('es-PY', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}`
+      });
+    }
+    setPin('');
+    setTimeout(() => setMessage(null), 4000);
+  }
+  const todayRecords = clockRecords.filter(r => r.date === now.toDateString());
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      maxWidth: 600,
+      margin: '0 auto'
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      marginBottom: 16,
+      textAlign: 'center',
+      fontSize: '1.2rem'
+    }
+  }, "\u23F0 Marcaci\xF3n"), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      textAlign: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "clock-display"
+  }, now.toLocaleTimeString('es-PY', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "clock-date"
+  }, now.toLocaleDateString('es-PY', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  })), /*#__PURE__*/React.createElement("form", {
+    onSubmit: e => {
+      e.preventDefault();
+      handleClock();
+    },
+    style: {
+      display: 'flex',
+      gap: 8,
+      justifyContent: 'center',
+      maxWidth: 320,
+      margin: '0 auto'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    className: "login-input",
+    type: "password",
+    placeholder: "Tu PIN",
+    inputMode: "numeric",
+    pattern: "[0-9]*",
+    maxLength: 4,
+    value: pin,
+    onChange: e => setPin(e.target.value.replace(/\D/g, '')),
+    style: {
+      marginBottom: 0
+    },
+    autoComplete: "off"
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    type: "submit",
+    style: {
+      whiteSpace: 'nowrap',
+      flexShrink: 0
+    }
+  }, "Marcar")), message && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      marginTop: 14,
+      padding: 12,
+      borderRadius: 8,
+      background: message.type === 'in' ? 'var(--success-light)' : message.type === 'out' ? '#fff3cd' : 'var(--danger-light)',
+      color: message.type === 'in' ? 'var(--success)' : message.type === 'out' ? '#856404' : 'var(--danger)',
+      fontWeight: 600,
+      fontSize: '.9rem'
+    }
+  }, message.text)), todayRecords.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 10
+    }
+  }, "Hoy"), todayRecords.map((r, i) => {
+    const inT = new Date(r.clockIn);
+    const outT = r.clockOut ? new Date(r.clockOut) : null;
+    const hrs = outT ? ((outT - inT) / 3600000).toFixed(1) : '—';
+    return /*#__PURE__*/React.createElement("div", {
+      key: r._key || i,
+      style: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '8px 0',
+        borderBottom: '1px solid var(--gray)',
+        fontSize: '.85rem'
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, r.employeeName), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '.7rem',
+        color: 'var(--gray3)'
+      }
+    }, ROLE_LABELS[r.role])), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: 'right'
+      }
+    }, /*#__PURE__*/React.createElement("span", null, inT.toLocaleTimeString('es-PY', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })), /*#__PURE__*/React.createElement("span", {
+      style: {
+        margin: '0 4px'
+      }
+    }, "\u2192"), outT ? /*#__PURE__*/React.createElement("span", null, outT.toLocaleTimeString('es-PY', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })) : /*#__PURE__*/React.createElement("span", {
+      className: "badge badge-preparing"
+    }, "Trabajando"), hrs !== '—' && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        fontWeight: 600,
+        color: 'var(--success)'
+      }
+    }, hrs, "h")));
+  })));
+}
+
+// ============== HISTORIAL ==============
+function HistorialPage({
+  allOrders
+}) {
+  const [days, setDays] = useState(7);
+  const now = new Date();
+
+  // Group orders by date
+  const byDate = {};
+  allOrders.forEach(o => {
+    if (o.status === 'paid' || o.type === 'vehiculo' && o.status !== 'awaiting_payment' && o.status !== 'cancelled') {
+      const d = o.date || new Date(o.createdAt).toISOString().slice(0, 10);
+      if (!byDate[d]) byDate[d] = {
+        total: 0,
+        count: 0,
+        products: {}
+      };
+      byDate[d].total += o.total || 0;
+      byDate[d].count++;
+      (o.items || []).forEach(it => {
+        const k = it.name;
+        if (!byDate[d].products[k]) byDate[d].products[k] = {
+          qty: 0,
+          revenue: 0
+        };
+        byDate[d].products[k].qty += it.qty;
+        byDate[d].products[k].revenue += it.price * it.qty;
+      });
+    }
+  });
+
+  // Last N days
+  const dateKeys = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    dateKeys.push(d.toISOString().slice(0, 10));
+  }
+  dateKeys.reverse();
+  const dailyData = dateKeys.map(d => ({
+    date: d,
+    ...(byDate[d] || {
+      total: 0,
+      count: 0,
+      products: {}
+    })
+  }));
+  const maxSale = Math.max(...dailyData.map(d => d.total), 1);
+
+  // Top products across selected period
+  const allProducts = {};
+  dailyData.forEach(d => {
+    Object.entries(d.products || {}).forEach(([name, data]) => {
+      if (!allProducts[name]) allProducts[name] = {
+        qty: 0,
+        revenue: 0
+      };
+      allProducts[name].qty += data.qty;
+      allProducts[name].revenue += data.revenue;
+    });
+  });
+  const topProducts = Object.entries(allProducts).sort((a, b) => b[1].qty - a[1].qty).slice(0, 10);
+  const totalPeriod = dailyData.reduce((s, d) => s + d.total, 0);
+  const totalOrders = dailyData.reduce((s, d) => s + d.count, 0);
+  const avgTicket = totalOrders > 0 ? Math.round(totalPeriod / totalOrders) : 0;
+
+  // Orders by type
+  const byType = {
+    mesa: 0,
+    vehiculo: 0,
+    delivery: 0,
+    carry_out: 0
+  };
+  allOrders.filter(o => dateKeys.includes(o.date) && (o.status === 'paid' || o.type === 'vehiculo' && o.status !== 'awaiting_payment' && o.status !== 'cancelled')).forEach(o => {
+    byType[o.type] = (byType[o.type] || 0) + 1;
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      marginBottom: 14,
+      fontSize: '1.2rem'
+    }
+  }, "\uD83D\uDCC8 Historial de Ventas"), /*#__PURE__*/React.createElement("div", {
+    className: "menu-cats",
+    style: {
+      marginBottom: 14
+    }
+  }, [7, 14, 30].map(n => /*#__PURE__*/React.createElement("button", {
+    key: n,
+    className: `cat-btn ${days === n ? 'active' : ''}`,
+    onClick: () => setDays(n)
+  }, "\xDAltimos ", n, " d\xEDas"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-grid",
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon green"
+  }, "\uD83D\uDCB0"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: '.95rem'
+    }
+  }, formatGs(totalPeriod)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Total Per\xEDodo"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon yellow"
+  }, "\uD83E\uDDFE"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value"
+  }, totalOrders), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Pedidos"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon blue"
+  }, "\uD83D\uDCCA"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: '.95rem'
+    }
+  }, formatGs(avgTicket)), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "Ticket Promedio"))), /*#__PURE__*/React.createElement("div", {
+    className: "stat-card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-icon red"
+  }, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "stat-value",
+    style: {
+      fontSize: '.85rem'
+    }
+  }, topProducts[0] ? topProducts[0][0] : '—'), /*#__PURE__*/React.createElement("div", {
+    className: "stat-label"
+  }, "M\xE1s Vendido")))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Ventas por D\xEDa"), dailyData.map(d => /*#__PURE__*/React.createElement("div", {
+    key: d.date,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.75rem',
+      color: 'var(--gray3)',
+      minWidth: 70,
+      fontWeight: 500
+    }
+  }, new Date(d.date + 'T12:00').toLocaleDateString('es-PY', {
+    day: '2-digit',
+    month: 'short',
+    weekday: 'short'
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "hist-bar",
+    style: {
+      width: Math.max(2, d.total / maxSale * 100) + '%',
+      background: d.date === todayStr() ? 'var(--primary)' : 'var(--dark2)'
+    }
+  })), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.8rem',
+      fontWeight: 700,
+      minWidth: 100,
+      textAlign: 'right'
+    }
+  }, formatGs(d.total)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.7rem',
+      color: 'var(--gray3)',
+      minWidth: 30
+    }
+  }, d.count, "p")))), /*#__PURE__*/React.createElement("div", {
+    className: "dashboard-2col",
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Top 10 Productos"), topProducts.map(([name, data], i) => /*#__PURE__*/React.createElement("div", {
+    key: name,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      padding: '6px 0',
+      borderBottom: '1px solid var(--gray)',
+      fontSize: '.82rem'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: 'var(--primary)',
+      marginRight: 6
+    }
+  }, "#", i + 1), name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600
+    }
+  }, data.qty, " uds"))), topProducts.length === 0 && /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--gray3)',
+      fontSize: '.85rem'
+    }
+  }, "Sin datos")), /*#__PURE__*/React.createElement("div", {
+    className: "card"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "card-title",
+    style: {
+      marginBottom: 12
+    }
+  }, "Por Tipo de Pedido"), Object.entries(byType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([type, count]) => /*#__PURE__*/React.createElement("div", {
+    key: type,
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      padding: '8px 0',
+      borderBottom: '1px solid var(--gray)',
+      fontSize: '.85rem'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, ORDER_TYPES[type]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700
+    }
+  }, count))), Object.values(byType).every(v => v === 0) && /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: 'var(--gray3)',
+      fontSize: '.85rem'
+    }
+  }, "Sin datos"))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      marginTop: 14,
+      background: 'var(--light)',
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '.8rem',
+      color: 'var(--gray3)'
+    }
+  }, "\uD83D\uDCA1 Los datos se guardan autom\xE1ticamente en la nube. El historial incluye todos los pedidos pagados.")));
+}
+
+// ============== EMPLEADOS ==============
+function EmpleadosPage({
+  employees,
+  addEmployee,
+  removeEmployee,
+  updateEmployee
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const [editEmp, setEditEmp] = useState(null);
+  const [form, setForm] = useState({
+    name: '',
+    role: 'mozo_interior',
+    pin: ''
+  });
+  function openAdd() {
+    setEditEmp(null);
+    setForm({
+      name: '',
+      role: 'mozo_interior',
+      pin: ''
+    });
+    setShowModal(true);
+  }
+  function openEdit(emp) {
+    setEditEmp(emp);
+    setForm({
+      name: emp.name,
+      role: emp.role,
+      pin: emp.pin || ''
+    });
+    setShowModal(true);
+  }
+  function handleSave() {
+    if (!form.name || !form.pin) return;
+    if (editEmp) {
+      updateEmployee(editEmp._key || editEmp.id, {
+        name: form.name,
+        role: form.role,
+        pin: form.pin
+      });
+    } else {
+      const newId = Date.now();
+      addEmployee({
+        ...form,
+        id: newId
+      });
+    }
+    setShowModal(false);
+    setForm({
+      name: '',
+      role: 'mozo_interior',
+      pin: ''
+    });
+    setEditEmp(null);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    className: "fade-in"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("h2", {
+    style: {
+      fontWeight: 800,
+      fontSize: '1.2rem'
+    }
+  }, "\uD83D\uDC65 Empleados"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary btn-sm",
+    onClick: openAdd
+  }, "+ Nuevo")), employees.map(e => /*#__PURE__*/React.createElement("div", {
+    key: e._key || e.id,
+    className: "card",
+    style: {
+      padding: 12,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: '.9rem'
+    }
+  }, e.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 6,
+      marginTop: 4,
+      alignItems: 'center'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "badge badge-preparing"
+  }, ROLE_LABELS[e.role]), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '.7rem',
+      color: 'var(--gray3)'
+    }
+  }, "PIN: ", e.pin))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    onClick: () => openEdit(e)
+  }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    style: {
+      color: 'var(--danger)'
+    },
+    onClick: () => {
+      if (confirm('¿Eliminar a ' + e.name + '?')) removeEmployee(e._key || e.id);
+    }
+  }, "\uD83D\uDDD1\uFE0F")))), showModal && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setShowModal(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-handle"
+  }), /*#__PURE__*/React.createElement("h3", null, editEmp ? '✏️ Editar' : '➕ Nuevo', " Empleado"), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Nombre"), /*#__PURE__*/React.createElement("input", {
+    value: form.name,
+    onChange: e => setForm({
+      ...form,
+      name: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "Rol"), /*#__PURE__*/React.createElement("select", {
+    value: form.role,
+    onChange: e => setForm({
+      ...form,
+      role: e.target.value
+    })
+  }, Object.entries(ROLE_LABELS).map(([k, v]) => /*#__PURE__*/React.createElement("option", {
+    key: k,
+    value: k
+  }, v)))), /*#__PURE__*/React.createElement("div", {
+    className: "form-group"
+  }, /*#__PURE__*/React.createElement("label", null, "PIN (4 d\xEDgitos)"), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    inputMode: "numeric",
+    maxLength: 4,
+    value: form.pin,
+    onChange: e => setForm({
+      ...form,
+      pin: e.target.value.replace(/\D/g, '')
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: 8,
+      marginTop: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-primary",
+    style: {
+      flex: 1
+    },
+    onClick: handleSave
+  }, "\uD83D\uDCBE Guardar"), /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {
+      flex: 1
+    },
+    onClick: () => {
+      setShowModal(false);
+      setEditEmp(null);
+    }
+  }, "Cancelar")))));
+}
+
+// ============== LISTA COMPRAS ==============
+// Ingredient categories by menu product
+// ============== PREP DASHBOARD ==============
+function PrepDashboardPage({user}) {
+  var dateKey = todayStr();
+  var lista = useFirebaseObj('listaCompras/' + dateKey, null);
+  var [addDesc, setAddDesc] = useState('');
+  var [addQty, setAddQty] = useState('');
+  var [tab, setTab] = useState('solicitud');
+
+  var items = lista && lista.items ? ensureArray(lista.items).filter(function(it) { return it && it.desc; }) : [];
+  var status = lista ? lista.status || 'draft' : 'none';
+  var pendingItems = items.filter(function(it) { return !it.received; });
+  var receivedItems = items.filter(function(it) { return it.received; });
+
+  function addItemPrep() {
+    if (!addDesc.trim()) return;
+    var newItem = {desc: addDesc.trim(), qty: addQty.trim(), addedBy: user.name + ' (Prep)', addedAt: Date.now(), received: false};
+    var updated = items.concat([newItem]);
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}));
+    setAddDesc('');
+    setAddQty('');
+  }
+  function removeItemPrep(idx) {
+    var updated = items.filter(function(_, i) { return i !== idx; });
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}));
+  }
+  function markPurchasing() {
+    if (!confirm('\u00BFConfirmar compra de ' + items.length + ' \u00EDtems?')) return;
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
+      status: 'purchasing', purchasingBy: user.name, purchasingAt: Date.now(), updatedBy: user.name, updatedAt: Date.now()
+    }));
+  }
+  function confirmItemReceived(idx) {
+    var updated = items.map(function(it, i) {
+      return i === idx ? Object.assign({}, it, {received: true, receivedBy: user.name, receivedAt: Date.now()}) : it;
+    });
+    var allReceived = updated.every(function(it) { return it.received; });
+    var extra = allReceived ? {status: 'received', receivedBy: user.name, receivedAt: Date.now()} : {};
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}, extra));
+  }
+
+  var statusColor = status === 'none' ? 'var(--gray3)' : status === 'draft' ? 'var(--secondary)' : status === 'finalized' ? 'var(--primary)' : status === 'purchasing' ? '#1976d2' : 'var(--success)';
+  var statusText = status === 'none' ? 'Sin solicitudes hoy' : status === 'draft' ? '\uD83D\uDCDD Borrador en curso' : status === 'finalized' ? '\uD83D\uDD14 Nueva solicitud recibida!' : status === 'purchasing' ? '\uD83D\uDED2 Compra en curso — recibiendo...' : '\u2705 Todo recibido';
+
+  return /*#__PURE__*/React.createElement("div", {className: "fade-in"},
+    /*#__PURE__*/React.createElement("h2", {style: {fontWeight: 800, marginBottom: 12, fontSize: '1.2rem'}}, "\uD83D\uDCE6 Panel de Preparaci\u00F3n"),
+    /*#__PURE__*/React.createElement("div", {className: "card", style: {
+      padding: 16, marginBottom: 14, borderLeft: '4px solid ' + statusColor,
+      background: status === 'finalized' ? '#fff3f0' : status === 'received' ? '#f0fff4' : status === 'purchasing' ? '#e8f4fd' : '#fff'
+    }},
+      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '1rem', color: statusColor, marginBottom: 4}}, statusText),
+      lista && lista.finalizedBy && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)'}},
+        "Enviada por: ", lista.finalizedBy, " \u2022 ", items.length, " \u00EDtems"),
+      status === 'purchasing' && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: '#1976d2', marginTop: 4, fontWeight: 600}},
+        "\u2705 ", receivedItems.length, " recibidos \u2022 \u23F3 ", pendingItems.length, " pendientes")),
+    (status === 'none' || status === 'draft') && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 30, textAlign: 'center', color: 'var(--gray3)'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '2.5rem', marginBottom: 8}}, "\u23F3"),
+      "Esperando solicitud de compras del equipo..."),
+    (status === 'finalized' || status === 'purchasing') && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 12}},
+        /*#__PURE__*/React.createElement("button", {
+          className: 'btn' + (tab === 'solicitud' ? ' btn-primary' : ''),
+          style: {flex: 1, padding: '8px', fontSize: '.85rem'},
+          onClick: function() { setTab('solicitud'); }
+        }, "\uD83D\uDCCB Pendientes (", pendingItems.length, ")"),
+        status === 'purchasing' && receivedItems.length > 0 && /*#__PURE__*/React.createElement("button", {
+          className: 'btn' + (tab === 'recibidos' ? ' btn-success' : ''),
+          style: {flex: 1, padding: '8px', fontSize: '.85rem'},
+          onClick: function() { setTab('recibidos'); }
+        }, "\u2705 Recibidos (", receivedItems.length, ")"),
+        /*#__PURE__*/React.createElement("button", {
+          className: 'btn' + (tab === 'agregar' ? ' btn-primary' : ''),
+          style: {flex: 1, padding: '8px', fontSize: '.85rem'},
+          onClick: function() { setTab('agregar'); }
+        }, "\u2795")),
+      tab === 'solicitud' && /*#__PURE__*/React.createElement("div", null,
+        pendingItems.length === 0 && status === 'purchasing' && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 20, textAlign: 'center', color: 'var(--success)'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem', marginBottom: 6}}, "\uD83C\uDF89"),
+          "Todos los \u00EDtems fueron recibidos!"),
+        items.map(function(it, idx) {
+          if (it.received) return null;
+          return /*#__PURE__*/React.createElement("div", {key: idx, className: "card", style: {
+            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', marginBottom: 6
+          }},
+            /*#__PURE__*/React.createElement("span", {style: {
+              width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)', color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '.8rem', flexShrink: 0
+            }}, idx + 1),
+            /*#__PURE__*/React.createElement("div", {style: {flex: 1}},
+              /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: '.9rem'}}, it.desc),
+              it.qty && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)'}}, "Sobrante: ", it.qty),
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#aaa'}}, it.addedBy || '?')),
+            status === 'finalized' && /*#__PURE__*/React.createElement("button", {
+              onClick: function() { removeItemPrep(idx); },
+              style: {background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--danger)', padding: '4px 8px'}
+            }, "\u2716"),
+            status === 'purchasing' && /*#__PURE__*/React.createElement("button", {
+              onClick: function() { confirmItemReceived(idx); },
+              className: "btn btn-success", style: {padding: '6px 14px', fontSize: '.8rem', fontWeight: 700}
+            }, "\u2705 Lleg\u00F3"));
+        }),
+        /*#__PURE__*/React.createElement("div", {style: {marginTop: 14}},
+          status === 'finalized' && /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {width: '100%', padding: '12px'}, onClick: markPurchasing},
+            "\uD83D\uDED2 Confirmar Compra (" + items.length + " \u00EDtems)"))),
+      tab === 'recibidos' && /*#__PURE__*/React.createElement("div", null,
+        receivedItems.length === 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 20, textAlign: 'center', color: 'var(--gray3)'}}, "Ning\u00FAn \u00EDtem recibido a\u00FAn"),
+        items.map(function(it, idx) {
+          if (!it.received) return null;
+          return /*#__PURE__*/React.createElement("div", {key: idx, style: {
+            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #f0f0f0', background: '#f0fff4'
+          }},
+            /*#__PURE__*/React.createElement("span", {style: {color: 'var(--success)', fontWeight: 700, fontSize: '1.1rem'}}, "\u2705"),
+            /*#__PURE__*/React.createElement("div", {style: {flex: 1}},
+              /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: '.85rem', color: 'var(--success)'}}, it.desc),
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#aaa'}}, "Recibido por ", it.receivedBy || '?')));
+        })),
+      tab === 'agregar' && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 14}},
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, marginBottom: 10, fontSize: '.9rem'}}, "\u2795 Agregar \u00EDtem a la solicitud"),
+        /*#__PURE__*/React.createElement("input", {className: "login-input", placeholder: "Descripci\u00F3n del \u00EDtem", value: addDesc, onChange: function(e) { setAddDesc(e.target.value); },
+          onKeyDown: function(e) { if (e.key === 'Enter') addItemPrep(); },
+          style: {marginBottom: 8, padding: '10px 12px'}}),
+        /*#__PURE__*/React.createElement("input", {className: "login-input", placeholder: "Cantidad sobrante (opcional)", value: addQty, onChange: function(e) { setAddQty(e.target.value); },
+          onKeyDown: function(e) { if (e.key === 'Enter') addItemPrep(); },
+          style: {marginBottom: 10, padding: '10px 12px'}}),
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {width: '100%', padding: '12px'}, onClick: addItemPrep}, "\u2795 Agregar"))),
+    status === 'received' && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 20, textAlign: 'center', background: '#f0fff4'}},
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '2.5rem', marginBottom: 8}}, "\u2705"),
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '1rem', color: 'var(--success)'}}, "Compra recibida completa"),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', color: 'var(--gray3)', marginTop: 6}}, receivedItems.length + " \u00EDtems recibidos")),
+      /*#__PURE__*/React.createElement("div", {style: {marginTop: 12}},
+        items.map(function(it, idx) {
+          return /*#__PURE__*/React.createElement("div", {key: idx, style: {
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderBottom: '1px solid #f0f0f0'
+          }},
+            /*#__PURE__*/React.createElement("span", {style: {color: 'var(--success)', fontWeight: 700}}, "\u2713"),
+            /*#__PURE__*/React.createElement("span", {style: {fontSize: '.85rem'}}, idx + 1, ". ", it.desc),
+            it.receivedBy && /*#__PURE__*/React.createElement("span", {style: {fontSize: '.7rem', color: '#aaa', marginLeft: 'auto'}}, it.receivedBy));
+        }))));
+}
+
+function ListaComprasPage({user}) {
+  var dateKey = todayStr();
+  var lista = useFirebaseObj('listaCompras/' + dateKey, null);
+  var [desc, setDesc] = useState('');
+  var [qty, setQty] = useState('');
+  var [saved, setSaved] = useState(false);
+
+  // Get items from Firebase
+  var items = lista && lista.items ? ensureArray(lista.items).filter(function(it) { return it && it.desc; }) : [];
+  var isFinalized = lista && lista.status === 'finalized';
+
+  function addItem() {
+    if (!desc.trim()) return;
+    var newItem = {desc: desc.trim(), qty: qty.trim(), addedBy: user.name, addedAt: Date.now()};
+    var updated = items.concat([newItem]);
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista || {}, {
+      items: updated,
+      updatedBy: user.name,
+      updatedAt: Date.now(),
+      createdBy: lista && lista.createdBy ? lista.createdBy : user.name,
+      createdAt: lista && lista.createdAt ? lista.createdAt : Date.now(),
+      status: lista && lista.status ? lista.status : 'draft'
+    }));
+    setDesc('');
+    setQty('');
+  }
+  function removeItem(idx) {
+    var updated = items.filter(function(_, i) { return i !== idx; });
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}));
+  }
+  function finalizeLista() {
+    if (!confirm('¿Finalizar y enviar a Preparación?')) return;
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
+      status: 'finalized',
+      finalizedBy: user.name,
+      finalizedAt: Date.now(),
+      updatedBy: user.name,
+      updatedAt: Date.now(),
+      notifyPrep: true
+    }));
+  }
+  function reopenLista() {
+    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
+      status: 'draft',
+      finalizedBy: null,
+      finalizedAt: null,
+      updatedBy: user.name,
+      updatedAt: Date.now(),
+      notifyPrep: false
+    }));
+  }
+
+  return /*#__PURE__*/React.createElement("div", {className: "fade-in"},
+    /*#__PURE__*/React.createElement("h2", {style: {fontWeight: 800, marginBottom: 6, fontSize: '1.2rem'}}, "\uD83D\uDED2 Solicitud de Compras"),
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 14}},
+      lista && lista.createdBy ? 'Creada por: ' + lista.createdBy : 'Nueva solicitud',
+      lista && lista.updatedBy ? ' | Editada: ' + lista.updatedBy : '',
+      isFinalized ? ' | \u2705 Enviada por: ' + lista.finalizedBy : ''),
+    isFinalized && /*#__PURE__*/React.createElement("div", {
+      className: "card", style: {background: '#f0fff4', border: '2px solid var(--success)', padding: 12, marginBottom: 14, textAlign: 'center'}
+    },
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: 'var(--success)'}}, "\u2705 Solicitud enviada a Preparaci\u00F3n"),
+      (user.role === 'admin' || user.role === 'prep') && /*#__PURE__*/React.createElement("button", {
+        className: "btn", onClick: reopenLista,
+        style: {marginLeft: 12, padding: '4px 14px', fontSize: '.8rem', background: 'var(--secondary)', color: '#fff', border: 'none'}
+      }, "\uD83D\uDD13 Reabrir")),
+    /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 14, marginBottom: 14}},
+      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 10}}, "\u2795 Agregar \u00EDtem"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center'}},
+        /*#__PURE__*/React.createElement("input", {className: "login-input", placeholder: "Descripci\u00F3n (ej: Carne para lomito)", value: desc, onChange: function(e) { setDesc(e.target.value); },
+          onKeyDown: function(e) { if (e.key === 'Enter') addItem(); },
+          style: {flex: 2, minWidth: 150, marginBottom: 0, padding: '10px 12px'}}),
+        /*#__PURE__*/React.createElement("input", {className: "login-input", placeholder: "Cant. sobrante", value: qty, onChange: function(e) { setQty(e.target.value); },
+          onKeyDown: function(e) { if (e.key === 'Enter') addItem(); },
+          style: {flex: 1, minWidth: 90, marginBottom: 0, padding: '10px 12px', textAlign: 'center'}}),
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", onClick: addItem, style: {padding: '10px 18px', fontWeight: 700}}, "\u2795 Agregar"))),
+    items.length === 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 30, textAlign: 'center', color: 'var(--gray3)'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem', marginBottom: 8}}, "\uD83D\uDCE6"),
+      "No hay \u00EDtems a\u00FAn. Agreg\u00E1 lo que necesit\u00E1s comprar."),
+    items.length > 0 && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', fontWeight: 700, color: 'var(--dark)', marginBottom: 8}}, "\uD83D\uDCCB Lista (", items.length, " \u00EDtems)"),
+      items.map(function(it, idx) {
+        return /*#__PURE__*/React.createElement("div", {key: idx, className: "card", style: {
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', marginBottom: 6
+        }},
+          /*#__PURE__*/React.createElement("span", {style: {
+            width: 28, height: 28, borderRadius: '50%', background: 'var(--primary)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '.8rem', flexShrink: 0
+          }}, idx + 1),
+          /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 0}},
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 600, fontSize: '.9rem'}}, it.desc),
+            it.qty && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)', marginTop: 2}}, "Sobrante: ", it.qty),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#aaa', marginTop: 2}}, it.addedBy || '?')),
+          !isFinalized && /*#__PURE__*/React.createElement("button", {
+            onClick: function() { removeItem(idx); },
+            style: {background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: 'var(--danger)', padding: '4px 8px'}
+          }, "\u2716"));
+      }),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 14}},
+        !isFinalized && /*#__PURE__*/React.createElement("button", {className: "btn btn-success", style: {flex: 1, padding: '12px'}, onClick: finalizeLista},
+          "\uD83D\uDCE8 Enviar a Preparaci\u00F3n (" + items.length + " \u00EDtems)"))));
+}
+
+// ============== SOLICITUDES ==============
+function SolicitudesPage({
+  user
+}) {
+  const solicitudes = useFirebaseList('solicitudes', []);
+  const [description, setDescription] = useState('');
+  function createRequest() {
+    if (!description.trim()) return;
+    fbPush('solicitudes', {
+      createdBy: user.name,
+      createdAt: Date.now(),
+      description: description.trim(),
+      status: 'pending',
+      resolvedBy: null,
+      resolvedAt: null
+    });
+    setDescription('');
+  }
+  function updateStatus(key, status) {
+    fbUpdate('solicitudes/' + key, {
+      status: status,
+      resolvedBy: status !== 'pending' ? user.name : null,
+      resolvedAt: status !== 'pending' ? Date.now() : null
+    });
+  }
+  const statusColors = {
+    pending: 'badge-pending',
+    in_progress: 'badge-preparing',
+    done: 'badge-success'
+  };
+  return /*#__PURE__*/React.createElement("div", {className: "fade-in"}, /*#__PURE__*/React.createElement("h2", {style: {fontWeight: 800, marginBottom: 14}}, "🔧 Solicitudes"), /*#__PURE__*/React.createElement("div", {className: "card", style: {marginBottom: 14, padding: 14}}, /*#__PURE__*/React.createElement("div", {className: "form-group"}, /*#__PURE__*/React.createElement("label", null, "Describir problema o solicitud"), /*#__PURE__*/React.createElement("textarea", {rows: 4, value: description, onChange: e => setDescription(e.target.value), style: {width: '100%', padding: '8px 12px', border: '1px solid var(--gray)', borderRadius: 8, fontFamily: 'inherit'}})), /*#__PURE__*/React.createElement("button", {className: "btn btn-primary btn-block", onClick: createRequest}, "📤 Enviar Solicitud")), /*#__PURE__*/React.createElement("div", null, solicitudes.length === 0 ? /*#__PURE__*/React.createElement("p", {style: {color: 'var(--gray3)'}}, "Sin solicitudes") : solicitudes.map(s => /*#__PURE__*/React.createElement("div", {key: s._key, className: "card", style: {marginBottom: 10, padding: 14}}, /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', marginBottom: 8}}, /*#__PURE__*/React.createElement("span", {style: {fontWeight: 600}}, s.description), /*#__PURE__*/React.createElement("span", {className: statusColors[s.status]}, s.status === 'pending' ? 'Pendiente' : s.status === 'in_progress' ? 'En progreso' : 'Hecho')), /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)', marginBottom: 8}}, "Creado por: ", s.createdBy, " • ", new Date(s.createdAt).toLocaleDateString()), user.role === 'admin' && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4}}, /*#__PURE__*/React.createElement("button", {className: "btn btn-outline btn-sm", onClick: () => updateStatus(s._key, 'in_progress')}, "▶️ En progreso"), /*#__PURE__*/React.createElement("button", {className: "btn btn-outline btn-sm", onClick: () => updateStatus(s._key, 'done')}, "✅ Hecho"))))));
+}
+
+// ============== RENDER ==============
+try {
+  ReactDOM.render(/*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(App, null)), document.getElementById('root'));
+} catch (e) {
+  document.getElementById('root').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;text-align:center;padding:20px"><div><h2 style="color:#e63946">Error de Inicio</h2><p>' + e.message + '</p><pre style="text-align:left;font-size:.7rem;max-width:600px;overflow:auto;background:#f5f5f5;padding:12px;border-radius:8px">' + e.stack + '</pre></div></div>';
+}</script>
+</body>
+</html>

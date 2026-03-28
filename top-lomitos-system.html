@@ -583,8 +583,56 @@ const MENU_DATA = [{
   icon: '➕',
   items: [{
     id: 'ag1',
-    name: 'Agregado Opcional',
-    price: 4000
+    name: 'Extra Carne',
+    price: 12000
+  }, {
+    id: 'ag2',
+    name: 'Extra Pollo',
+    price: 10000
+  }, {
+    id: 'ag3',
+    name: 'Extra Queso',
+    price: 5000
+  }, {
+    id: 'ag4',
+    name: 'Extra Queso Cheddar',
+    price: 6000
+  }, {
+    id: 'ag5',
+    name: 'Extra Panceta',
+    price: 7000
+  }, {
+    id: 'ag6',
+    name: 'Extra Huevo',
+    price: 3000
+  }, {
+    id: 'ag7',
+    name: 'Extra Jam\u00F3n',
+    price: 5000
+  }, {
+    id: 'ag8',
+    name: 'Papas Fritas Porci\u00F3n',
+    price: 15000
+  }, {
+    id: 'ag9',
+    name: 'Mandioca Frita Porci\u00F3n',
+    price: 15000
+  }, {
+    id: 'ag10',
+    name: 'Ensalada',
+    price: 10000
+  }, {
+    id: 'ag11',
+    name: 'Salsa de Ajo Extra',
+    price: 3000
+  }, {
+    id: 'ag12',
+    name: 'Mayonesa Extra',
+    price: 2000
+  }, {
+    id: 'ag13',
+    name: 'Ketchup Extra',
+    price: 2000
   }]
 }, {
   id: 'gaseosas',
@@ -1428,7 +1476,7 @@ function AppMain({
     }
   }, [connStatus]);
   const todayOrders = orders.filter(o => o.date === dateKey);
-  const activeOrders = todayOrders.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
+  const activeOrders = todayOrders.filter(o => o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'archived');
   const paidToday = todayOrders.filter(o => o.status === 'paid');
   const dailySales = paidToday.reduce((s, o) => s + (o.total || 0), 0) + todayOrders.filter(o => o.status !== 'awaiting_payment' && o.status !== 'cancelled' && o.type === 'vehiculo' && o.status !== 'paid').reduce((s, o) => s + (o.total || 0), 0);
   function handleLogin(emp) {
@@ -1505,16 +1553,27 @@ function AppMain({
     fbRemove('stock/' + id);
   }
   async function resetDay() {
+    if (!confirm('¿Resetear el día? Los pedidos de hoy se archivan en historial y el contador vuelve a 0001.')) return;
     const dk = todayStr();
-    // Delete all today's orders
     const todayKeys = orders.filter(o => o.date === dk).map(o => o._key || o.id);
     const updates = {};
-    todayKeys.forEach(k => { updates['orders/' + k] = null; });
+    // Move today's orders to history (mark as archived)
+    todayKeys.forEach(k => { updates['orders/' + k + '/status'] = 'archived'; });
     // Reset daily counter
     updates['counters/' + dk] = null;
     if (Object.keys(updates).length > 0) {
       await db.ref().update(updates);
     }
+  }
+  async function resetGeneral() {
+    if (!confirm('⚠️ RESET GENERAL: ¿Borrar TODOS los pedidos de TODOS los días? Esto NO se puede deshacer.')) return;
+    if (!confirm('¿Estás SEGURO? Se perderá todo el historial.')) return;
+    const updates = {};
+    updates['orders'] = null;
+    updates['counters'] = null;
+    updates['listaCompras'] = null;
+    updates['solicitudes'] = null;
+    await db.ref().update(updates);
   }
   if (!user) return /*#__PURE__*/React.createElement(LoginScreen, {
     employees: employees,
@@ -1528,9 +1587,9 @@ function AppMain({
   });
   const menuByRole = {
     admin: ['dashboard', 'pedidos', 'cocina', 'caja', 'stock', 'prep_dash', 'lista', 'solicitudes', 'marcacion', 'historial', 'empleados'],
-    mozo_interior: ['pedidos', 'lista', 'solicitudes', 'marcacion'],
-    mozo_exterior: ['pedidos', 'lista', 'solicitudes', 'marcacion'],
-    cajera: ['caja', 'pedidos', 'lista', 'solicitudes', 'marcacion'],
+    mozo_interior: ['pedidos', 'lista', 'marcacion'],
+    mozo_exterior: ['pedidos', 'lista', 'marcacion'],
+    cajera: ['caja', 'pedidos', 'lista', 'marcacion'],
     cocina: ['cocina', 'lista', 'solicitudes', 'marcacion'],
     prep: ['prep_dash', 'stock', 'lista', 'solicitudes', 'marcacion']
   };
@@ -1542,7 +1601,7 @@ function AppMain({
   }, {
     key: 'pedidos',
     icon: '📝',
-    label: 'Pedidos'
+    label: 'Pedidos/Serv.'
   }, {
     key: 'cocina',
     icon: '👨‍🍳',
@@ -1733,7 +1792,8 @@ function AppMain({
     stock: stock,
     now: now,
     dailySales: dailySales,
-    onResetDay: user.role === 'admin' ? resetDay : null
+    onResetDay: user.role === 'admin' ? resetDay : null,
+    onResetGeneral: user.role === 'admin' ? resetGeneral : null
   }), page === 'pedidos' && /*#__PURE__*/React.createElement(PedidosPage, {
     user: user,
     onAddOrder: addOrder,
@@ -2002,9 +2062,9 @@ function Dashboard({
   stock,
   now,
   dailySales,
-  onResetDay
+  onResetDay,
+  onResetGeneral
 }) {
-  const [confirmReset, setConfirmReset] = useState(false);
   const lowStock = stock.filter(s => s.qty <= s.min);
   const paidToday = orders.filter(o => o.status === 'paid');
   return /*#__PURE__*/React.createElement("div", {
@@ -2115,28 +2175,20 @@ function Dashboard({
     className: "stock-low"
   }, s.qty, " ", s.unit))))), onResetDay && /*#__PURE__*/React.createElement("div", {
     className: "card",
-    style: {marginTop: 20, border: '2px solid var(--danger)', background: '#fff5f5'}
+    style: {marginTop: 20, border: '2px solid var(--danger)', background: '#fff5f5', padding: 16}
   }, /*#__PURE__*/React.createElement("div", {
     className: "card-title",
     style: {color: 'var(--danger)', marginBottom: 8}
-  }, "\u26A0\uFE0F Zona Admin"), /*#__PURE__*/React.createElement("p", {
-    style: {fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}
-  }, "Borrar todos los pedidos del d\xEDa y resetear el contador. Ideal para empezar el d\xEDa limpio o borrar pruebas."), !confirmReset ? /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-danger",
-    onClick: () => setConfirmReset(true)
-  }, "\uD83D\uDDD1\uFE0F Resetear D\xEDa") : /*#__PURE__*/React.createElement("div", {
-    style: {background: '#fff', border: '2px solid var(--danger)', borderRadius: 10, padding: 16, textAlign: 'center'}
-  }, /*#__PURE__*/React.createElement("p", {
-    style: {fontWeight: 700, fontSize: '.95rem', marginBottom: 12, color: 'var(--danger)'}
-  }, "\xBFEst\xE1s seguro? Se borrar\xE1n TODOS los pedidos de hoy y el contador vuelve a 0001."), /*#__PURE__*/React.createElement("div", {
-    style: {display: 'flex', gap: 8, justifyContent: 'center'}
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-danger",
-    onClick: () => { onResetDay(); setConfirmReset(false); }
-  }, "\u2705 S\xED, resetear todo"), /*#__PURE__*/React.createElement("button", {
-    className: "btn btn-outline",
-    onClick: () => setConfirmReset(false)
-  }, "Cancelar")))));
+  }, "\u26A0\uFE0F Zona Admin"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 10, flexWrap: 'wrap'}},
+      /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200, background: '#fff', border: '1px solid var(--gray)', borderRadius: 10, padding: 14}},
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 6}}, "\uD83D\uDD04 Reset del D\u00EDa"),
+        /*#__PURE__*/React.createElement("p", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 10}}, "Archiva los pedidos de hoy (quedan en historial) y reinicia el contador a #0001."),
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {width: '100%'}, onClick: onResetDay}, "\uD83D\uDD04 Resetear D\u00EDa")),
+      /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200, background: '#fff', border: '2px solid var(--danger)', borderRadius: 10, padding: 14}},
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 6, color: 'var(--danger)'}}, "\uD83D\uDDD1\uFE0F Reset General"),
+        /*#__PURE__*/React.createElement("p", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 10}}, "Borra TODO: pedidos, historial, listas de compras y solicitudes. No se puede deshacer."),
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-danger", style: {width: '100%'}, onClick: onResetGeneral}, "\uD83D\uDDD1\uFE0F Reset General")))));
 }
 
 // ============== PEDIDOS ==============
@@ -2663,7 +2715,41 @@ function PedidosPage({
   }, /*#__PURE__*/React.createElement("span", null, "Total"), /*#__PURE__*/React.createElement("span", null, formatGs(cartTotal()))), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-primary btn-block",
     onClick: submitOrder
-  }, addingToOrder ? "\u2705 Agregar a Pedido #" + (addingToOrder.orderNum || '----') : "\u2705 Enviar Pedido")))));
+  }, addingToOrder ? "\u2705 Agregar a Pedido #" + (addingToOrder.orderNum || '----') : "\u2705 Enviar Pedido")))),
+    /*#__PURE__*/React.createElement(RepairRequestWidget, {user: user}));
+}
+
+function RepairRequestWidget({user}) {
+  var [open, setOpen] = useState(false);
+  var [desc, setDesc] = useState('');
+  var [sent, setSent] = useState(false);
+  function sendRequest() {
+    if (!desc.trim()) return;
+    fbPush('solicitudes', {
+      createdBy: user.name,
+      createdAt: Date.now(),
+      description: desc.trim(),
+      status: 'pending',
+      resolvedBy: null,
+      resolvedAt: null
+    });
+    setDesc('');
+    setSent(true);
+    setTimeout(function() { setSent(false); setOpen(false); }, 2000);
+  }
+  return /*#__PURE__*/React.createElement("div", {style: {marginTop: 16, marginBottom: 80}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn", onClick: function() { setOpen(!open); },
+      style: {width: '100%', padding: '12px', background: open ? 'var(--dark)' : 'var(--light)', color: open ? '#fff' : 'var(--dark)',
+        border: '1px solid var(--gray)', borderRadius: 12, fontWeight: 600, fontSize: '.9rem'}
+    }, "\uD83D\uDD27 Solicitar Reparaci\u00F3n / Servicio"),
+    open && /*#__PURE__*/React.createElement("div", {className: "card", style: {marginTop: 8, padding: 14}},
+      sent ? /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', padding: 16, color: 'var(--success)', fontWeight: 700}},
+        "\u2705 Solicitud enviada!") :
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("textarea", {rows: 3, placeholder: "Describir el problema o lo que se necesita...", value: desc, onChange: function(e) { setDesc(e.target.value); },
+          style: {width: '100%', padding: '10px 12px', border: '1px solid var(--gray)', borderRadius: 8, fontFamily: 'inherit', fontSize: '.85rem', marginBottom: 10}}),
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {width: '100%', padding: '10px'}, onClick: sendRequest}, "\uD83D\uDCE4 Enviar Solicitud"))));
 }
 
 // ============== COCINA ==============
@@ -3745,7 +3831,7 @@ function HistorialPage({
   // Group orders by date
   const byDate = {};
   allOrders.forEach(o => {
-    if (o.status === 'paid' || o.type === 'vehiculo' && o.status !== 'awaiting_payment' && o.status !== 'cancelled') {
+    if (o.status === 'paid' || o.status === 'archived' || o.type === 'vehiculo' && o.status !== 'awaiting_payment' && o.status !== 'cancelled') {
       const d = o.date || new Date(o.createdAt).toISOString().slice(0, 10);
       if (!byDate[d]) byDate[d] = {
         total: 0,

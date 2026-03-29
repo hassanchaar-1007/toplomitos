@@ -1006,6 +1006,7 @@ function generateCashierTicketHtml(order) {
     '<div class="r b big"><span>TOTAL</span><span>' + formatGs(order.total) + '</span></div>' +
     '<div class="ln"></div>' +
     (order.notes ? '<div>Nota: ' + order.notes + '</div><div class="ln"></div>' : '') +
+    (order.paymentMethod ? '<div class="c b" style="margin-top:4px">Pago: ' + (order.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : order.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR/Transfer.' : '\uD83D\uDCB5 Efectivo') + '</div><div class="ln"></div>' : '') +
     '<div class="c" style="margin-top:8px">Gracias por la preferencia!</div>' +
     '</div>';
 }
@@ -2478,7 +2479,9 @@ function PedidosPage({
       fontStyle: 'italic',
       marginBottom: 6
     }
-  }, "\uD83D\uDCCC ", o.notes), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCCC ", o.notes), o.estimatedMin && o.status === 'preparing' && /*#__PURE__*/React.createElement("div", {
+    style: {textAlign: 'center', padding: '4px 8px', background: '#e3f2fd', borderRadius: 6, marginBottom: 6, fontWeight: 600, fontSize: '.8rem'}
+  }, "\u23F1\uFE0F Tiempo estimado: ", o.estimatedMin, " min"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 4,
@@ -2813,12 +2816,43 @@ function RepairRequestWidget({user}) {
 }
 
 // ============== COCINA ==============
+var kitchenBellAudio = null;
+function playKitchenBell() {
+  try {
+    if (!kitchenBellAudio) {
+      var ac = new (window.AudioContext || window.webkitAudioContext)();
+      function beep(freq, start, dur) {
+        var osc = ac.createOscillator();
+        var gain = ac.createGain();
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, ac.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.01, ac.currentTime + start + dur);
+        osc.start(ac.currentTime + start);
+        osc.stop(ac.currentTime + start + dur);
+      }
+      beep(880, 0, 0.15);
+      beep(1100, 0.18, 0.15);
+      beep(880, 0.36, 0.25);
+    }
+  } catch(e) { console.warn('Audio not supported'); }
+}
+
 function CocinaPage({
   orders,
   onUpdateOrder
 }) {
+  var prevPendingCount = useRef(orders.filter(o => o.status === 'pending').length);
   const pending = orders.filter(o => o.status === 'pending');
   const preparing = orders.filter(o => o.status === 'preparing');
+  useEffect(function() {
+    if (pending.length > prevPendingCount.current) {
+      playKitchenBell();
+    }
+    prevPendingCount.current = pending.length;
+  }, [pending.length]);
   return /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -2907,8 +2941,8 @@ function CocinaPage({
   }, "\uD83D\uDCCC ", o.notes), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-warning btn-block",
     onClick: () => {
-      onUpdateOrder(o.id, {status: 'preparing'});
-      printBothTickets(o);
+      onUpdateOrder(o.id, {status: 'preparing', preparingAt: Date.now()});
+      silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateKitchenTicketHtml(o) + '</body></html>');
     }
   }, "\uD83D\uDD25 Preparar"))), preparing.map(o => /*#__PURE__*/React.createElement("div", {
     key: o._key || o.id,
@@ -2953,10 +2987,21 @@ function CocinaPage({
     key: i
   }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("span", {
     className: "qty"
-  }, it.qty, "x"), " ", it.name)))), /*#__PURE__*/React.createElement("button", {
+  }, it.qty, "x"), " ", it.name)))), o.estimatedMin && /*#__PURE__*/React.createElement("div", {
+    style: {textAlign: 'center', padding: '6px', background: '#e3f2fd', borderRadius: 8, marginBottom: 6, fontWeight: 700, fontSize: '.85rem'}
+  }, "\u23F1\uFE0F Tiempo estimado: ", o.estimatedMin, " min"), !o.estimatedMin && /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', gap: 4, marginBottom: 6, flexWrap: 'wrap'}
+  }, [5, 10, 15, 20, 30].map(function(min) {
+    return /*#__PURE__*/React.createElement("button", {
+      key: min,
+      className: "btn btn-outline btn-sm",
+      style: {flex: 1, fontSize: '.75rem', padding: '4px'},
+      onClick: function() { onUpdateOrder(o.id, {estimatedMin: min}); }
+    }, min, "'");
+  })), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success btn-block",
     onClick: () => onUpdateOrder(o.id, {
-      status: 'ready'
+      status: 'ready', readyAt: Date.now()
     })
   }, "\u2705 Listo!"))), orders.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "card",
@@ -2991,7 +3036,14 @@ function CajaPage({
   const [editOrder, setEditOrder] = useState(null);
   const [editNotes, setEditNotes] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [payingOrder, setPayingOrder] = useState(null);
   const isAdmin = userRole === 'admin';
+  function cobrarConMetodo(order, metodo) {
+    onUpdateOrder(order.id, {status: 'paid', paymentMethod: metodo, paidAt: Date.now()});
+    setPayingOrder(null);
+    setReceiptOrder(order);
+    silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, order, {paymentMethod: metodo})) + '</body></html>');
+  }
   // Group unpaid orders by mesa/vehicle for "Por Mesa" view
   const mesaGroups = useMemo(() => {
     const unpaid = orders.filter(o => o.status !== 'paid' && o.status !== 'cancelled');
@@ -3006,6 +3058,11 @@ function CajaPage({
     });
     return Object.values(groups).filter(g => g.orders.length > 0);
   }, [orders]);
+  const salesByMethod = useMemo(function() {
+    var result = {efectivo: 0, tarjeta: 0, qr: 0};
+    paidToday.forEach(function(o) { result[o.paymentMethod || 'efectivo'] += (o.total || 0); });
+    return result;
+  }, [paidToday]);
   const shown = filter === 'awaiting' ? awaitingOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
   return /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
@@ -3062,7 +3119,11 @@ function CajaPage({
     className: "stat-value"
   }, readyOrders.length), /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
-  }, "Por Cobrar")))), /*#__PURE__*/React.createElement("div", {
+  }, "Por Cobrar")))), paidToday.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {display: 'flex', gap: 8, marginBottom: 12, fontSize: '.78rem'}
+  }, /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#e8f5e9', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCB5 ", formatGs(salesByMethod.efectivo)),
+  /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#e3f2fd', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCB3 ", formatGs(salesByMethod.tarjeta)),
+  /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#f3e5f5', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCF1 ", formatGs(salesByMethod.qr))), /*#__PURE__*/React.createElement("div", {
     className: "menu-cats",
     style: {
       marginBottom: 12
@@ -3113,8 +3174,7 @@ function CajaPage({
     className: "btn btn-success",
     style: {flex: 1},
     onClick: () => {
-      g.orders.forEach(o => onUpdateOrder(o.id, {status: 'paid'}));
-      setReceiptOrder({...g.orders[0], items: g.orders.flatMap(o => ensureArray(o.items)), total: g.total, orderNum: g.label});
+      setPayingOrder({...g.orders[0], items: g.orders.flatMap(o => ensureArray(o.items)), total: g.total, orderNum: g.label, _groupOrders: g.orders});
     }
   }, "\uD83D\uDCB5 Cobrar Todo (", formatGs(g.total), ")")))) :
   shown.map(o => /*#__PURE__*/React.createElement("div", {
@@ -3203,23 +3263,15 @@ function CajaPage({
       fontWeight: 700
     },
     onClick: () => {
-      onUpdateOrder(o.id, {
-        status: 'pending'
-      });
-      setReceiptOrder({
-        ...o,
-        status: 'paid'
-      });
+      onUpdateOrder(o.id, {status: 'pending'});
+      setPayingOrder(o);
     }
   }, "\uD83D\uDE97 Cobrar y Enviar"), (o.status === 'ready' || o.status === 'served') && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success btn-sm",
-    onClick: () => {
-      onUpdateOrder(o.id, {
-        status: 'paid'
-      });
-      setReceiptOrder(o);
-    }
-  }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPayingOrder(o)
+  }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
+    style: {fontSize: '.7rem', color: 'var(--gray3)', fontWeight: 600}
+  }, o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1' : '\uD83D\uDCB5', ' ', o.paymentMethod || 'efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => setReceiptOrder(o)
   }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
@@ -3462,7 +3514,55 @@ function CajaPage({
       flex: 1
     },
     onClick: () => setReceiptOrder(null)
-  }, "Cerrar")))));
+  }, "Cerrar")))), payingOrder && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setPayingOrder(null)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation(),
+    style: {maxWidth: 380}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCB0 Cobrar Pedido"),
+  /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', marginBottom: 6}},
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem'}}, "#", payingOrder.orderNum || '----', " \u2014 ", payingOrder.waiter || ''),
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.3rem', marginTop: 4}}, formatGs(payingOrder.total))
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '10px 0'}}),
+  /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}}, "Seleccionar m\xE9todo de pago:"),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', gap: 8}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-success",
+      style: {padding: '14px', fontSize: '1rem'},
+      onClick: function() {
+        var po = payingOrder;
+        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'efectivo', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'efectivo'})) + '</body></html>'); }
+        else { cobrarConMetodo(po, 'efectivo'); }
+      }
+    }, "\uD83D\uDCB5 Efectivo"),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn",
+      style: {padding: '14px', fontSize: '1rem', background: '#1565c0', color: '#fff'},
+      onClick: function() {
+        var po = payingOrder;
+        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'tarjeta', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'tarjeta'})) + '</body></html>'); }
+        else { cobrarConMetodo(po, 'tarjeta'); }
+      }
+    }, "\uD83D\uDCB3 Tarjeta"),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn",
+      style: {padding: '14px', fontSize: '1rem', background: '#7b1fa2', color: '#fff'},
+      onClick: function() {
+        var po = payingOrder;
+        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'qr', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'qr'})) + '</body></html>'); }
+        else { cobrarConMetodo(po, 'qr'); }
+      }
+    }, "\uD83D\uDCF1 QR / Transferencia")
+  ),
+  /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline",
+    style: {marginTop: 10, width: '100%'},
+    onClick: () => setPayingOrder(null)
+  }, "Cancelar"))));
 }
 
 // ============== STOCK ==============

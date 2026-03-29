@@ -1061,18 +1061,29 @@ function printKitchenTicket(order) {
   setTimeout(function() { w.print(); }, 400);
 }
 
+function silentPrint(html) {
+  var frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
+  document.body.appendChild(frame);
+  var doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(function() {
+    try { frame.contentWindow.print(); } catch(e) { console.warn('Print error', e); }
+    setTimeout(function() { document.body.removeChild(frame); }, 2000);
+  }, 500);
+}
+
 function printBothTickets(order) {
-  var w = window.open('', '_blank', 'width=320,height=900');
-  if (!w) return alert('Permitir ventanas emergentes para imprimir tickets.\nConfigurar el navegador para permitir popups de este sitio.');
-  w.document.write('<html><head><style>' + TICKET_STYLES +
+  var html = '<html><head><style>' + TICKET_STYLES +
     '.divider{text-align:center;font-size:10px;color:#999;margin:4mm 0;border-top:3px solid #000;padding-top:2mm}' +
     '</style></head><body>' +
     generateKitchenTicketHtml(order) +
     '<div class="divider">- - - CORTAR AQUI - - -</div>' +
     generateCashierTicketHtml(order) +
-    '</body></html>');
-  w.document.close();
-  setTimeout(function() { w.print(); }, 400);
+    '</body></html>';
+  silentPrint(html);
 }
 
 // ============== SEED DATABASE ==============
@@ -3096,7 +3107,7 @@ function CajaPage({
     style: {padding: '8px 0', borderBottom: '1px solid var(--gray)', fontSize: '.85rem'}
   }, /*#__PURE__*/React.createElement("div", {
     style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}
-  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "#", o.orderNum || '----'), " ", o.isAgregado ? '(Agregado)' : '', " — ", ensureArray(o.items).map(i => i.qty + 'x ' + i.name).join(' · ')), /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(o.total))))), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("b", null, "#", o.orderNum || '----'), " ", o.isAgregado ? '(Agregado)' : '', o.waiter ? /*#__PURE__*/React.createElement("span", {style: {color: 'var(--dark2)', fontWeight: 600, marginLeft: 6}}, "\uD83D\uDC64 ", o.waiter) : null, " \u2014 ", ensureArray(o.items).map(i => i.qty + 'x ' + i.name).join(' \xB7 ')), /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(o.total))))), /*#__PURE__*/React.createElement("div", {
     style: {display: 'flex', gap: 8, marginTop: 10}
   }, /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success",

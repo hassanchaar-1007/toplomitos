@@ -1868,7 +1868,8 @@ function AppMain({
     onUpdateOrder: updateOrder,
     onDeleteOrder: deleteOrder,
     dailySales: dailySales,
-    userRole: user.role
+    userRole: user.role,
+    userName: user.name
   }), page === 'stock' && /*#__PURE__*/React.createElement(StockPage, {
     stock: stock,
     updateStock: updateStock,
@@ -3024,7 +3025,8 @@ function CajaPage({
   onUpdateOrder,
   onDeleteOrder,
   dailySales,
-  userRole
+  userRole,
+  userName
 }) {
   const [filter, setFilter] = useState('awaiting');
   const awaitingOrders = orders.filter(o => o.status === 'awaiting_payment');
@@ -3039,7 +3041,155 @@ function CajaPage({
   const [payingOrder, setPayingOrder] = useState(null);
   const [mixMode, setMixMode] = useState(false);
   const [mixEfectivo, setMixEfectivo] = useState('');
+  const [showCierreModal, setShowCierreModal] = useState(false);
+  const [showReporteFinal, setShowReporteFinal] = useState(false);
+  const [injectionAmount, setInjectionAmount] = useState('');
+  const [injectionNote, setInjectionNote] = useState('');
+  const [showInjection, setShowInjection] = useState(false);
+  const [floatAmount, setFloatAmount] = useState('');
   const isAdmin = userRole === 'admin';
+
+  // === SHIFT MANAGEMENT ===
+  var dateKey = todayStr();
+  var shiftsData = useFirebaseObj('cajaShifts/' + dateKey, null);
+  var allShifts = shiftsData ? Object.keys(shiftsData).map(function(k) { return Object.assign({_key: k}, shiftsData[k]); }) : [];
+  var myOpenShift = allShifts.find(function(s) { return s.cashier === userName && s.status === 'open'; });
+  var closedShifts = allShifts.filter(function(s) { return s.status === 'closed'; });
+
+  function openShift() {
+    var amt = Number(floatAmount) || 0;
+    var shiftKey = userName.replace(/\s/g, '_') + '_' + Date.now();
+    fbSet('cajaShifts/' + dateKey + '/' + shiftKey, {
+      cashier: userName,
+      startedAt: Date.now(),
+      closedAt: null,
+      openingFloat: amt,
+      injections: [],
+      status: 'open'
+    });
+    setFloatAmount('');
+  }
+
+  function addInjection() {
+    if (!myOpenShift || !Number(injectionAmount)) return;
+    var current = myOpenShift.injections ? ensureArray(myOpenShift.injections) : [];
+    current.push({amount: Number(injectionAmount), time: Date.now(), note: injectionNote || 'Sencillo extra'});
+    fbUpdate('cajaShifts/' + dateKey + '/' + myOpenShift._key, {injections: current});
+    setInjectionAmount('');
+    setInjectionNote('');
+    setShowInjection(false);
+  }
+
+  // Calculate shift-specific sales
+  var myShiftSales = useMemo(function() {
+    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0};
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0};
+    paidToday.forEach(function(o) {
+      if (o.paidAt && o.paidAt >= myOpenShift.startedAt) {
+        result.total += (o.total || 0);
+        result.count++;
+        if (o.paymentMethod === 'mixto') {
+          result.efectivo += (o.mixEfectivo || 0);
+          result[o.mixOtroMetodo || 'tarjeta'] += (o.mixOtro || 0);
+        } else {
+          result[o.paymentMethod || 'efectivo'] += (o.total || 0);
+        }
+      }
+    });
+    return result;
+  }, [paidToday, myOpenShift]);
+
+  function closeShift() {
+    if (!myOpenShift) return;
+    var injectionsTotal = (myOpenShift.injections ? ensureArray(myOpenShift.injections) : []).reduce(function(s, i) { return s + (i.amount || 0); }, 0);
+    fbUpdate('cajaShifts/' + dateKey + '/' + myOpenShift._key, {
+      status: 'closed',
+      closedAt: Date.now(),
+      salesEfectivo: myShiftSales.efectivo,
+      salesTarjeta: myShiftSales.tarjeta,
+      salesQr: myShiftSales.qr,
+      salesTotal: myShiftSales.total,
+      salesCount: myShiftSales.count,
+      totalInjections: injectionsTotal
+    });
+    setShowCierreModal(false);
+  }
+
+  function printCierreReport(shift) {
+    var injList = shift.injections ? ensureArray(shift.injections) : [];
+    var injectionsTotal = injList.reduce(function(s, i) { return s + (i.amount || 0); }, 0);
+    var cashInRegister = (shift.openingFloat || 0) + injectionsTotal + (shift.salesEfectivo || 0);
+    var cashToSafe = shift.salesEfectivo || 0;
+    var html = '<html><head><style>' + TICKET_STYLES + '</style></head><body><div class="ticket">' +
+      '<div class="c b big">TOP LOMITOS</div><div class="c">CIERRE DE CAJA</div><div class="ln"></div>' +
+      '<div class="b">Cajera: ' + (shift.cashier || '') + '</div>' +
+      '<div>Inicio: ' + new Date(shift.startedAt).toLocaleString('es-PY') + '</div>' +
+      '<div>Cierre: ' + new Date(shift.closedAt || Date.now()).toLocaleString('es-PY') + '</div>' +
+      '<div class="ln"></div>' +
+      '<div class="b">APERTURA</div>' +
+      '<div class="r"><span>Sencillo inicial:</span><span>' + formatGs(shift.openingFloat || 0) + '</span></div>' +
+      (injList.length > 0 ? '<div class="b" style="margin-top:6px">INYECCIONES:</div>' + injList.map(function(inj) {
+        return '<div class="r"><span>' + (inj.note || 'Extra') + ' (' + new Date(inj.time).toLocaleTimeString('es-PY', {hour:'2-digit',minute:'2-digit'}) + ')</span><span>' + formatGs(inj.amount) + '</span></div>';
+      }).join('') + '<div class="r b"><span>Total inyectado:</span><span>' + formatGs(injectionsTotal) + '</span></div>' : '') +
+      '<div class="ln"></div>' +
+      '<div class="b">VENTAS (' + (shift.salesCount || 0) + ' pedidos)</div>' +
+      '<div class="r"><span>\uD83D\uDCB5 Efectivo:</span><span>' + formatGs(shift.salesEfectivo || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCB3 Tarjeta:</span><span>' + formatGs(shift.salesTarjeta || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCF1 QR/Transfer:</span><span>' + formatGs(shift.salesQr || 0) + '</span></div>' +
+      '<div class="r b big"><span>Total vendido:</span><span>' + formatGs(shift.salesTotal || 0) + '</span></div>' +
+      '<div class="ln"></div>' +
+      '<div class="b">RESUMEN DE CAJA FISICA</div>' +
+      '<div class="r"><span>Sencillo + inyecciones:</span><span>' + formatGs((shift.openingFloat || 0) + injectionsTotal) + '</span></div>' +
+      '<div class="r"><span>+ Ventas efectivo:</span><span>' + formatGs(shift.salesEfectivo || 0) + '</span></div>' +
+      '<div class="r b" style="font-size:16px;margin-top:4px"><span>TOTAL EN CAJA:</span><span>' + formatGs(cashInRegister) + '</span></div>' +
+      '<div class="ln"></div>' +
+      '<div class="r"><span>Llevar a caja fuerte:</span><span class="b">' + formatGs(cashToSafe) + '</span></div>' +
+      '<div class="r"><span>Queda sencillo:</span><span class="b">' + formatGs((shift.openingFloat || 0) + injectionsTotal) + '</span></div>' +
+      '<div class="ln"></div><div class="c">Firma cajera: _______________</div>' +
+      '</div></body></html>';
+    silentPrint(html);
+  }
+
+  function printReporteFinal() {
+    var allClosed = closedShifts;
+    var totals = {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0, floats: 0, injections: 0};
+    allClosed.forEach(function(s) {
+      totals.efectivo += (s.salesEfectivo || 0);
+      totals.tarjeta += (s.salesTarjeta || 0);
+      totals.qr += (s.salesQr || 0);
+      totals.total += (s.salesTotal || 0);
+      totals.count += (s.salesCount || 0);
+      totals.floats += (s.openingFloat || 0);
+      totals.injections += (s.totalInjections || 0);
+    });
+    var html = '<html><head><style>' + TICKET_STYLES + '</style></head><body><div class="ticket">' +
+      '<div class="c b big">TOP LOMITOS</div><div class="c b">REPORTE FINAL DEL DIA</div>' +
+      '<div class="c">' + new Date().toLocaleDateString('es-PY') + '</div><div class="ln"></div>' +
+      allClosed.map(function(s) {
+        return '<div class="b">\uD83D\uDC64 ' + s.cashier + '</div>' +
+          '<div style="font-size:11px">' + new Date(s.startedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'}) + ' - ' + new Date(s.closedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'}) + '</div>' +
+          '<div class="r"><span>Efectivo:</span><span>' + formatGs(s.salesEfectivo || 0) + '</span></div>' +
+          '<div class="r"><span>Tarjeta:</span><span>' + formatGs(s.salesTarjeta || 0) + '</span></div>' +
+          '<div class="r"><span>QR:</span><span>' + formatGs(s.salesQr || 0) + '</span></div>' +
+          '<div class="r b"><span>Subtotal:</span><span>' + formatGs(s.salesTotal || 0) + '</span></div>' +
+          '<div class="ln"></div>';
+      }).join('') +
+      '<div class="b big" style="margin-top:6px">TOTALES DEL DIA</div>' +
+      '<div class="r"><span>Total pedidos:</span><span>' + totals.count + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCB5 Total efectivo:</span><span>' + formatGs(totals.efectivo) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCB3 Total tarjeta:</span><span>' + formatGs(totals.tarjeta) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCF1 Total QR:</span><span>' + formatGs(totals.qr) + '</span></div>' +
+      '<div class="ln"></div>' +
+      '<div class="r b big"><span>FACTURACION TOTAL:</span><span>' + formatGs(totals.total) + '</span></div>' +
+      '<div class="ln"></div>' +
+      '<div class="r"><span>Sencillos entregados:</span><span>' + formatGs(totals.floats) + '</span></div>' +
+      '<div class="r"><span>Inyecciones:</span><span>' + formatGs(totals.injections) + '</span></div>' +
+      '<div class="r b"><span>En caja fuerte:</span><span>' + formatGs(totals.efectivo) + '</span></div>' +
+      '<div class="ln"></div><div class="c">Firma administrador: _______________</div>' +
+      '</div></body></html>';
+    silentPrint(html);
+  }
+
   function cobrarConMetodo(order, metodo, mixData) {
     var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now()};
     if (mixData) {
@@ -3097,7 +3247,70 @@ function CajaPage({
       marginBottom: 14,
       fontSize: '1.2rem'
     }
-  }, "\uD83D\uDCB0 Caja"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCB0 Caja"),
+
+  /* === SHIFT OPENING === */
+  !myOpenShift && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {padding: 16, marginBottom: 14, border: '2px solid var(--warning)', background: '#fffde7'}
+  }, /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 8, fontSize: '.95rem'}}, "\uD83D\uDD13 Abrir Turno de Caja"),
+  /*#__PURE__*/React.createElement("p", {style: {fontSize: '.82rem', color: 'var(--gray3)', marginBottom: 10}}, "Ingres\xE1 el monto de sencillo/vuelto que se puso en la caja para iniciar tu turno."),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, alignItems: 'center'}},
+    /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      value: floatAmount,
+      onChange: function(e) { setFloatAmount(e.target.value); },
+      placeholder: "Monto sencillo (Gs.)",
+      style: {flex: 1, padding: '10px 12px', border: '2px solid var(--warning)', borderRadius: 8, fontSize: '1rem', fontWeight: 700}
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-warning",
+      style: {padding: '10px 20px', fontWeight: 700},
+      onClick: openShift
+    }, "\uD83D\uDD13 Abrir Caja")
+  ),
+  closedShifts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {marginTop: 8, fontSize: '.78rem', color: 'var(--gray3)'}},
+    "Turnos cerrados hoy: ", closedShifts.map(function(s) { return s.cashier; }).join(', ')
+  )),
+
+  /* === SHIFT STATUS BAR === */
+  myOpenShift && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {padding: 12, marginBottom: 14, background: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)', border: '2px solid var(--success)'}
+  }, /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6}},
+    /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800, fontSize: '.9rem'}}, "\uD83D\uDFE2 Turno: ", userName),
+      /*#__PURE__*/React.createElement("span", {style: {fontSize: '.75rem', color: 'var(--gray3)', marginLeft: 8}}, "desde ", new Date(myOpenShift.startedAt).toLocaleTimeString('es-PY', {hour:'2-digit', minute:'2-digit'}))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6}},
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-outline btn-sm",
+        style: {fontSize: '.75rem'},
+        onClick: function() { setShowInjection(true); }
+      }, "\uD83D\uDCB5+ Inyectar Sencillo"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-sm",
+        style: {fontSize: '.75rem', background: 'var(--danger)', color: '#fff'},
+        onClick: function() { setShowCierreModal(true); }
+      }, "\uD83D\uDD12 Cerrar Turno")
+    )
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 8, fontSize: '.78rem', flexWrap: 'wrap'}},
+    /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6}}, "Sencillo: ", formatGs(myOpenShift.openingFloat || 0)),
+    (myOpenShift.injections && ensureArray(myOpenShift.injections).length > 0) && /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6}}, "Inyecciones: ", formatGs(ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0))),
+    /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6, fontWeight: 700}}, "Ventas turno: ", formatGs(myShiftSales.total), " (", myShiftSales.count, " ped.)")
+  )),
+
+  /* === ADMIN: REPORTE FINAL === */
+  isAdmin && closedShifts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      style: {fontSize: '.78rem'},
+      onClick: function() { setShowReporteFinal(true); }
+    }, "\uD83D\uDCCA Reporte Final del D\xEDa")
+  ),
+
+  /*#__PURE__*/React.createElement("div", {
     className: "stat-grid",
     style: {
       marginBottom: 14
@@ -3642,7 +3855,124 @@ function CajaPage({
     className: "btn btn-outline",
     style: {marginTop: 10, width: '100%'},
     onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); }
-  }, "Cancelar"))));
+  }, "Cancelar"))),
+
+  /* === INJECTION MODAL === */
+  showInjection && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setShowInjection(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 360}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDCB5 Inyectar Sencillo"),
+  /*#__PURE__*/React.createElement("p", {style: {fontSize: '.82rem', color: 'var(--gray3)', marginBottom: 10}}, "Agregar m\xE1s sencillo/vuelto a la caja durante el turno."),
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 8}},
+    /*#__PURE__*/React.createElement("label", null, "Monto (Gs.)"),
+    /*#__PURE__*/React.createElement("input", {type: "number", value: injectionAmount, onChange: function(e) { setInjectionAmount(e.target.value); }, placeholder: "Ej: 100000", style: {width: '100%', padding: '10px', border: '1px solid var(--gray)', borderRadius: 8, fontSize: '1rem', fontWeight: 700}})
+  ),
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 12}},
+    /*#__PURE__*/React.createElement("label", null, "Nota (opcional)"),
+    /*#__PURE__*/React.createElement("input", {type: "text", value: injectionNote, onChange: function(e) { setInjectionNote(e.target.value); }, placeholder: "Ej: Cambio de 5mil", style: {width: '100%', padding: '8px', border: '1px solid var(--gray)', borderRadius: 8}})
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-success", style: {flex: 1}, onClick: addInjection}, "\u2705 Agregar"),
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowInjection(false); }}, "Cancelar")
+  ))),
+
+  /* === CIERRE DE TURNO MODAL === */
+  showCierreModal && myOpenShift && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setShowCierreModal(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 420}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", {style: {color: 'var(--danger)'}}, "\uD83D\uDD12 Cierre de Turno"),
+  /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', marginBottom: 8}},
+    /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, "Cajera:"), " ", userName),
+    /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("b", null, "Turno:"), " ", new Date(myOpenShift.startedAt).toLocaleTimeString('es-PY', {hour:'2-digit',minute:'2-digit'}), " - Ahora")
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '8px 0'}}),
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#f5f5f5'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, marginBottom: 6}}, "Apertura"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+      /*#__PURE__*/React.createElement("span", null, "Sencillo inicial:"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(myOpenShift.openingFloat || 0))
+    ),
+    (myOpenShift.injections && ensureArray(myOpenShift.injections).length > 0) && /*#__PURE__*/React.createElement("div", null,
+      ensureArray(myOpenShift.injections).map(function(inj, idx) {
+        return /*#__PURE__*/React.createElement("div", {key: idx, style: {display: 'flex', justifyContent: 'space-between', fontSize: '.8rem', color: 'var(--gray3)'}},
+          /*#__PURE__*/React.createElement("span", null, "+ ", inj.note || 'Inyecci\xF3n', " (", new Date(inj.time).toLocaleTimeString('es-PY', {hour:'2-digit',minute:'2-digit'}), ")"),
+          /*#__PURE__*/React.createElement("span", null, formatGs(inj.amount))
+        );
+      })
+    )
+  ),
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#e8f5e9'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, marginBottom: 6}}, "Ventas del Turno (", myShiftSales.count, " pedidos)"),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB5 Efectivo:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.efectivo))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB3 Tarjeta:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.tarjeta))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.qr))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:6, paddingTop:6, borderTop:'1px solid #a5d6a7'}}, /*#__PURE__*/React.createElement("span",null,"Total vendido:"), /*#__PURE__*/React.createElement("span",null, formatGs(myShiftSales.total)))
+  ),
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 12, background: '#fff3e0', border: '2px solid var(--warning)'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCE6 Al cerrar turno:"),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"Llevar a caja fuerte:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800, color:'var(--danger)', fontSize:'1.1rem'}}, formatGs(myShiftSales.efectivo))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', marginTop:4}}, /*#__PURE__*/React.createElement("span",null,"Queda sencillo en caja:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0))))
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-danger",
+      style: {flex: 1, padding: '12px'},
+      onClick: function() {
+        if (confirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.')) {
+          closeShift();
+          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
+        }
+      }
+    }, "\uD83D\uDD12 Confirmar Cierre e Imprimir"),
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowCierreModal(false); }}, "Cancelar")
+  ))),
+
+  /* === REPORTE FINAL DEL DIA === */
+  showReporteFinal && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setShowReporteFinal(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 450}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDCCA Reporte Final del D\xEDa"),
+  /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 10}}, new Date().toLocaleDateString('es-PY')),
+  closedShifts.map(function(s) {
+    return /*#__PURE__*/React.createElement("div", {key: s._key, className: "card", style: {padding: 10, marginBottom: 8, background: '#f5f5f5'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700}}, "\uD83D\uDC64 ", s.cashier),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}}, new Date(s.startedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'}), " - ", new Date(s.closedAt).toLocaleTimeString('es-PY',{hour:'2-digit',minute:'2-digit'})),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 4, fontSize: '.8rem'}},
+        /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCB5", formatGs(s.salesEfectivo || 0)),
+        /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCB3", formatGs(s.salesTarjeta || 0)),
+        /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCF1", formatGs(s.salesQr || 0)),
+        /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, "= ", formatGs(s.salesTotal || 0))
+      )
+    );
+  }),
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, background: '#e8f5e9', border: '2px solid var(--success)'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 6}}, "TOTALES DEL DIA"),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB5 Total Efectivo:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800}}, formatGs(closedShifts.reduce(function(s,sh){return s+(sh.salesEfectivo||0);},0)))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB3 Total Tarjeta:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800}}, formatGs(closedShifts.reduce(function(s,sh){return s+(sh.salesTarjeta||0);},0)))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 Total QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800}}, formatGs(closedShifts.reduce(function(s,sh){return s+(sh.salesQr||0);},0)))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1.1rem', fontWeight:800, marginTop:8, paddingTop:8, borderTop:'2px solid var(--success)'}}, /*#__PURE__*/React.createElement("span",null,"FACTURACION TOTAL:"), /*#__PURE__*/React.createElement("span",null, formatGs(closedShifts.reduce(function(s,sh){return s+(sh.salesTotal||0);},0)))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', marginTop:6, color: 'var(--gray3)'}}, /*#__PURE__*/React.createElement("span",null,"En caja fuerte:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(closedShifts.reduce(function(s,sh){return s+(sh.salesEfectivo||0);},0))))
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 10}},
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {flex: 1}, onClick: printReporteFinal}, "\uD83D\uDDA8\uFE0F Imprimir Reporte"),
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowReporteFinal(false); }}, "Cerrar")
+  )))
+  );
 }
 
 // ============== STOCK ==============

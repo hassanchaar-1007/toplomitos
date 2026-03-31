@@ -1006,7 +1006,7 @@ function generateCashierTicketHtml(order) {
     '<div class="r b big"><span>TOTAL</span><span>' + formatGs(order.total) + '</span></div>' +
     '<div class="ln"></div>' +
     (order.notes ? '<div>Nota: ' + order.notes + '</div><div class="ln"></div>' : '') +
-    (order.paymentMethod ? '<div class="c b" style="margin-top:4px">Pago: ' + (order.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : order.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR/Transfer.' : '\uD83D\uDCB5 Efectivo') + '</div><div class="ln"></div>' : '') +
+    (order.paymentMethod === 'mixto' ? '<div class="ln"></div><div class="b" style="margin-top:4px">Pago Mixto:</div><div class="r"><span>\uD83D\uDCB5 Efectivo</span><span>' + formatGs(order.mixEfectivo || 0) + '</span></div><div class="r"><span>' + (order.mixOtroMetodo === 'qr' ? '\uD83D\uDCF1 QR' : '\uD83D\uDCB3 Tarjeta') + '</span><span>' + formatGs(order.mixOtro || 0) + '</span></div><div class="ln"></div>' : order.paymentMethod ? '<div class="c b" style="margin-top:4px">Pago: ' + (order.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : order.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR/Transfer.' : '\uD83D\uDCB5 Efectivo') + '</div><div class="ln"></div>' : '') +
     '<div class="c" style="margin-top:8px">Gracias por la preferencia!</div>' +
     '</div>';
 }
@@ -3037,12 +3037,28 @@ function CajaPage({
   const [editNotes, setEditNotes] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [payingOrder, setPayingOrder] = useState(null);
+  const [mixMode, setMixMode] = useState(false);
+  const [mixEfectivo, setMixEfectivo] = useState('');
   const isAdmin = userRole === 'admin';
-  function cobrarConMetodo(order, metodo) {
-    onUpdateOrder(order.id, {status: 'paid', paymentMethod: metodo, paidAt: Date.now()});
+  function cobrarConMetodo(order, metodo, mixData) {
+    var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now()};
+    if (mixData) {
+      payData.paymentMethod = 'mixto';
+      payData.mixEfectivo = mixData.efectivo;
+      payData.mixOtro = mixData.otro;
+      payData.mixOtroMetodo = mixData.otroMetodo;
+    }
+    if (order._groupOrders) {
+      order._groupOrders.forEach(function(o) { onUpdateOrder(o.id, payData); });
+    } else {
+      onUpdateOrder(order.id, payData);
+    }
     setPayingOrder(null);
+    setMixMode(false);
+    setMixEfectivo('');
     setReceiptOrder(order);
-    silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, order, {paymentMethod: metodo})) + '</body></html>');
+    var ticketOrder = Object.assign({}, order, payData);
+    silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(ticketOrder) + '</body></html>');
   }
   // Group unpaid orders by mesa/vehicle for "Por Mesa" view
   const mesaGroups = useMemo(() => {
@@ -3059,8 +3075,17 @@ function CajaPage({
     return Object.values(groups).filter(g => g.orders.length > 0);
   }, [orders]);
   const salesByMethod = useMemo(function() {
-    var result = {efectivo: 0, tarjeta: 0, qr: 0};
-    paidToday.forEach(function(o) { result[o.paymentMethod || 'efectivo'] += (o.total || 0); });
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, total: 0};
+    paidToday.forEach(function(o) {
+      result.total += (o.total || 0);
+      if (o.paymentMethod === 'mixto') {
+        result.efectivo += (o.mixEfectivo || 0);
+        var otroMet = o.mixOtroMetodo || 'tarjeta';
+        result[otroMet] += (o.mixOtro || 0);
+      } else {
+        result[o.paymentMethod || 'efectivo'] += (o.total || 0);
+      }
+    });
     return result;
   }, [paidToday]);
   const shown = filter === 'awaiting' ? awaitingOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
@@ -3120,10 +3145,25 @@ function CajaPage({
   }, readyOrders.length), /*#__PURE__*/React.createElement("div", {
     className: "stat-label"
   }, "Por Cobrar")))), paidToday.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {display: 'flex', gap: 8, marginBottom: 12, fontSize: '.78rem'}
-  }, /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#e8f5e9', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCB5 ", formatGs(salesByMethod.efectivo)),
-  /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#e3f2fd', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCB3 ", formatGs(salesByMethod.tarjeta)),
-  /*#__PURE__*/React.createElement("span", {style: {padding: '4px 10px', background: '#f3e5f5', borderRadius: 6, fontWeight: 600}}, "\uD83D\uDCF1 ", formatGs(salesByMethod.qr))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {padding: 12, marginBottom: 12, background: 'linear-gradient(135deg, #f8f9fa, #e8f5e9)'}
+  }, /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}},
+    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800, fontSize: '.9rem'}}, "\uD83D\uDCCA Resumen de Caja"),
+    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800, fontSize: '1rem'}}, "Total: ", formatGs(salesByMethod.total))
+  ), /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, flexWrap: 'wrap'}},
+    /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 100, padding: '8px 10px', background: '#c8e6c9', borderRadius: 8, textAlign: 'center'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#2e7d32', fontWeight: 600}}, "\uD83D\uDCB5 EFECTIVO EN CAJA"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#1b5e20'}}, formatGs(salesByMethod.efectivo))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 100, padding: '8px 10px', background: '#bbdefb', borderRadius: 8, textAlign: 'center'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#1565c0', fontWeight: 600}}, "\uD83D\uDCB3 POS TARJETA"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#0d47a1'}}, formatGs(salesByMethod.tarjeta))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 100, padding: '8px 10px', background: '#e1bee7', borderRadius: 8, textAlign: 'center'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#7b1fa2', fontWeight: 600}}, "\uD83D\uDCF1 QR / TRANSFER"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#4a148c'}}, formatGs(salesByMethod.qr))
+    )
+  )), /*#__PURE__*/React.createElement("div", {
     className: "menu-cats",
     style: {
       marginBottom: 12
@@ -3271,7 +3311,7 @@ function CajaPage({
     onClick: () => setPayingOrder(o)
   }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
     style: {fontSize: '.7rem', color: 'var(--gray3)', fontWeight: 600}
-  }, o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1' : '\uD83D\uDCB5', ' ', o.paymentMethod || 'efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
+  }, o.paymentMethod === 'mixto' ? '\uD83D\uDD00 Mixto' : o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : '\uD83D\uDCB5 Efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => setReceiptOrder(o)
   }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
@@ -3516,52 +3556,92 @@ function CajaPage({
     onClick: () => setReceiptOrder(null)
   }, "Cerrar")))), payingOrder && /*#__PURE__*/React.createElement("div", {
     className: "modal-overlay",
-    onClick: () => setPayingOrder(null)
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); }
   }, /*#__PURE__*/React.createElement("div", {
     className: "modal",
     onClick: e => e.stopPropagation(),
-    style: {maxWidth: 380}
+    style: {maxWidth: 400}
   }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
   /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCB0 Cobrar Pedido"),
   /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', marginBottom: 6}},
     /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem'}}, "#", payingOrder.orderNum || '----', " \u2014 ", payingOrder.waiter || ''),
-    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.3rem', marginTop: 4}}, formatGs(payingOrder.total))
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.4rem', marginTop: 4, color: 'var(--primary)'}}, formatGs(payingOrder.total))
   ),
   /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '10px 0'}}),
-  /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}}, "Seleccionar m\xE9todo de pago:"),
-  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', gap: 8}},
+  !mixMode ? /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}}, "M\xE9todo de pago:"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', gap: 8}},
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-success",
+        style: {padding: '14px', fontSize: '1rem'},
+        onClick: function() { cobrarConMetodo(payingOrder, 'efectivo'); }
+      }, "\uD83D\uDCB5 Efectivo"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn",
+        style: {padding: '14px', fontSize: '1rem', background: '#1565c0', color: '#fff'},
+        onClick: function() { cobrarConMetodo(payingOrder, 'tarjeta'); }
+      }, "\uD83D\uDCB3 Tarjeta (D\xE9bito/Cr\xE9dito)"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn",
+        style: {padding: '14px', fontSize: '1rem', background: '#7b1fa2', color: '#fff'},
+        onClick: function() { cobrarConMetodo(payingOrder, 'qr'); }
+      }, "\uD83D\uDCF1 QR / Transferencia"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-outline",
+        style: {padding: '12px', fontSize: '.9rem', marginTop: 4, borderStyle: 'dashed'},
+        onClick: function() { setMixMode(true); setMixEfectivo(''); }
+      }, "\uD83D\uDD00 Pago Mixto (Efectivo + Otro)")
+    )
+  ) : /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', fontWeight: 700, marginBottom: 10}}, "\uD83D\uDD00 Pago Mixto"),
+    /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+      /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "\uD83D\uDCB5 Monto en Efectivo (Gs.)"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        value: mixEfectivo,
+        onChange: function(e) { setMixEfectivo(e.target.value); },
+        placeholder: "Ej: 50000",
+        style: {width: '100%', padding: '10px 12px', border: '2px solid var(--success)', borderRadius: 8, fontFamily: 'inherit', fontSize: '1.1rem', fontWeight: 700}
+      })
+    ),
+    Number(mixEfectivo) > 0 && Number(mixEfectivo) < payingOrder.total && /*#__PURE__*/React.createElement("div", {
+      style: {padding: '8px 12px', background: '#f5f5f5', borderRadius: 8, marginBottom: 10, fontSize: '.85rem'}
+    },
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between'}},
+        /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCB5 Efectivo:"),
+        /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(Number(mixEfectivo)))
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', marginTop: 4}},
+        /*#__PURE__*/React.createElement("span", null, "Resta pagar con otro m\xE9todo:"),
+        /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: 'var(--primary)'}}, formatGs(payingOrder.total - Number(mixEfectivo)))
+      )
+    ),
+    Number(mixEfectivo) > 0 && Number(mixEfectivo) < payingOrder.total && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("p", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 6, textAlign: 'center'}}, "Resto (", formatGs(payingOrder.total - Number(mixEfectivo)), ") pagar con:"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6}},
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn",
+          style: {flex: 1, padding: '12px', background: '#1565c0', color: '#fff', fontSize: '.9rem'},
+          onClick: function() { cobrarConMetodo(payingOrder, 'mixto', {efectivo: Number(mixEfectivo), otro: payingOrder.total - Number(mixEfectivo), otroMetodo: 'tarjeta'}); }
+        }, "\uD83D\uDCB3 Tarjeta"),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn",
+          style: {flex: 1, padding: '12px', background: '#7b1fa2', color: '#fff', fontSize: '.9rem'},
+          onClick: function() { cobrarConMetodo(payingOrder, 'mixto', {efectivo: Number(mixEfectivo), otro: payingOrder.total - Number(mixEfectivo), otroMetodo: 'qr'}); }
+        }, "\uD83D\uDCF1 QR")
+      )
+    ),
+    Number(mixEfectivo) >= payingOrder.total && /*#__PURE__*/React.createElement("p", {style: {color: 'var(--danger)', fontSize: '.85rem', textAlign: 'center'}}, "El monto en efectivo cubre el total. Us\xE1 el bot\xF3n de Efectivo."),
     /*#__PURE__*/React.createElement("button", {
-      className: "btn btn-success",
-      style: {padding: '14px', fontSize: '1rem'},
-      onClick: function() {
-        var po = payingOrder;
-        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'efectivo', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'efectivo'})) + '</body></html>'); }
-        else { cobrarConMetodo(po, 'efectivo'); }
-      }
-    }, "\uD83D\uDCB5 Efectivo"),
-    /*#__PURE__*/React.createElement("button", {
-      className: "btn",
-      style: {padding: '14px', fontSize: '1rem', background: '#1565c0', color: '#fff'},
-      onClick: function() {
-        var po = payingOrder;
-        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'tarjeta', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'tarjeta'})) + '</body></html>'); }
-        else { cobrarConMetodo(po, 'tarjeta'); }
-      }
-    }, "\uD83D\uDCB3 Tarjeta"),
-    /*#__PURE__*/React.createElement("button", {
-      className: "btn",
-      style: {padding: '14px', fontSize: '1rem', background: '#7b1fa2', color: '#fff'},
-      onClick: function() {
-        var po = payingOrder;
-        if (po._groupOrders) { po._groupOrders.forEach(function(o) { onUpdateOrder(o.id, {status: 'paid', paymentMethod: 'qr', paidAt: Date.now()}); }); setPayingOrder(null); setReceiptOrder(po); silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(Object.assign({}, po, {paymentMethod: 'qr'})) + '</body></html>'); }
-        else { cobrarConMetodo(po, 'qr'); }
-      }
-    }, "\uD83D\uDCF1 QR / Transferencia")
+      className: "btn btn-outline",
+      style: {width: '100%', marginTop: 8},
+      onClick: function() { setMixMode(false); setMixEfectivo(''); }
+    }, "\u2190 Volver")
   ),
-  /*#__PURE__*/React.createElement("button", {
+  !mixMode && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline",
     style: {marginTop: 10, width: '100%'},
-    onClick: () => setPayingOrder(null)
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); }
   }, "Cancelar"))));
 }
 

@@ -1003,6 +1003,8 @@ function generateCashierTicketHtml(order) {
     '<div class="ln"></div>' +
     itemsHtml +
     '<div class="ln"></div>' +
+    (order.discount ? '<div class="r"><span>Subtotal:</span><span>' + formatGs(order.originalTotal || 0) + '</span></div>' +
+      '<div class="r" style="color:#c62828"><span>Descuento:</span><span>-' + formatGs(order.discount) + '</span></div>' : '') +
     '<div class="r b big"><span>TOTAL</span><span>' + formatGs(order.total) + '</span></div>' +
     '<div class="ln"></div>' +
     (order.notes ? '<div>Nota: ' + order.notes + '</div><div class="ln"></div>' : '') +
@@ -3046,6 +3048,7 @@ function CajaPage({
   const [payingOrder, setPayingOrder] = useState(null);
   const [mixMode, setMixMode] = useState(false);
   const [mixEfectivo, setMixEfectivo] = useState('');
+  const [discountAmount, setDiscountAmount] = useState('');
   const [showCierreModal, setShowCierreModal] = useState(false);
   const [showReporteFinal, setShowReporteFinal] = useState(false);
   const [injectionAmount, setInjectionAmount] = useState('');
@@ -3087,12 +3090,13 @@ function CajaPage({
 
   // Calculate shift-specific sales
   var myShiftSales = useMemo(function() {
-    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0};
-    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0};
+    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0};
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0};
     paidToday.forEach(function(o) {
       if (o.paidAt && o.paidAt >= myOpenShift.startedAt) {
         result.total += (o.total || 0);
         result.count++;
+        result.discounts += (o.discount || 0);
         if (o.paymentMethod === 'mixto') {
           result.efectivo += (o.mixEfectivo || 0);
           result[o.mixOtroMetodo || 'tarjeta'] += (o.mixOtro || 0);
@@ -3116,6 +3120,7 @@ function CajaPage({
       salesTransferencia: myShiftSales.transferencia,
       salesTotal: myShiftSales.total,
       salesCount: myShiftSales.count,
+      totalDiscounts: myShiftSales.discounts,
       totalInjections: injectionsTotal
     });
     setShowCierreModal(false);
@@ -3143,7 +3148,8 @@ function CajaPage({
       '<div class="r"><span>\uD83D\uDCB3 Tarjeta:</span><span>' + formatGs(shift.salesTarjeta || 0) + '</span></div>' +
       '<div class="r"><span>\uD83D\uDCF1 QR:</span><span>' + formatGs(shift.salesQr || 0) + '</span></div>' +
       '<div class="r"><span>\uD83C\uDFE6 Transferencia:</span><span>' + formatGs(shift.salesTransferencia || 0) + '</span></div>' +
-      '<div class="r b big"><span>Total vendido:</span><span>' + formatGs(shift.salesTotal || 0) + '</span></div>' +
+      ((shift.totalDiscounts || 0) > 0 ? '<div class="r" style="color:#c62828"><span>Descuentos aplicados:</span><span>-' + formatGs(shift.totalDiscounts) + '</span></div>' : '') +
+      '<div class="r b big"><span>Total cobrado:</span><span>' + formatGs(shift.salesTotal || 0) + '</span></div>' +
       '<div class="ln"></div>' +
       '<div class="b">EFECTIVO EN CAJA</div>' +
       '<div class="r"><span>Sencillo inicial:</span><span>' + formatGs(shift.openingFloat || 0) + '</span></div>' +
@@ -3165,7 +3171,7 @@ function CajaPage({
 
   function printReporteFinal() {
     var allClosed = closedShifts;
-    var totals = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, floats: 0, injections: 0};
+    var totals = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, floats: 0, injections: 0, discounts: 0};
     allClosed.forEach(function(s) {
       totals.efectivo += (s.salesEfectivo || 0);
       totals.tarjeta += (s.salesTarjeta || 0);
@@ -3175,6 +3181,7 @@ function CajaPage({
       totals.count += (s.salesCount || 0);
       totals.floats += (s.openingFloat || 0);
       totals.injections += (s.totalInjections || 0);
+      totals.discounts += (s.totalDiscounts || 0);
     });
     var html = '<html><head><style>' + TICKET_STYLES + '</style></head><body><div class="ticket">' +
       '<div class="c b big">TOP LOMITOS</div><div class="c b">REPORTE FINAL DEL DIA</div>' +
@@ -3186,6 +3193,7 @@ function CajaPage({
           '<div class="r"><span>Tarjeta:</span><span>' + formatGs(s.salesTarjeta || 0) + '</span></div>' +
           '<div class="r"><span>QR:</span><span>' + formatGs(s.salesQr || 0) + '</span></div>' +
           '<div class="r"><span>Transferencia:</span><span>' + formatGs(s.salesTransferencia || 0) + '</span></div>' +
+          ((s.totalDiscounts || 0) > 0 ? '<div class="r" style="color:#c62828"><span>Descuentos:</span><span>-' + formatGs(s.totalDiscounts) + '</span></div>' : '') +
           '<div class="r b"><span>Subtotal:</span><span>' + formatGs(s.salesTotal || 0) + '</span></div>' +
           '<div class="ln"></div>';
       }).join('') +
@@ -3196,6 +3204,7 @@ function CajaPage({
       '<div class="r"><span>\uD83D\uDCF1 Total QR:</span><span>' + formatGs(totals.qr) + '</span></div>' +
       '<div class="r"><span>\uD83C\uDFE6 Total transferencia:</span><span>' + formatGs(totals.transferencia) + '</span></div>' +
       '<div class="ln"></div>' +
+      (totals.discounts > 0 ? '<div class="r" style="color:#c62828"><span>Total descuentos:</span><span>-' + formatGs(totals.discounts) + '</span></div>' : '') +
       '<div class="r b big"><span>FACTURACION TOTAL:</span><span>' + formatGs(totals.total) + '</span></div>' +
       '<div class="ln"></div>' +
       '<div class="r"><span>Sencillos entregados:</span><span>' + formatGs(totals.floats) + '</span></div>' +
@@ -3207,7 +3216,13 @@ function CajaPage({
   }
 
   function cobrarConMetodo(order, metodo, mixData) {
-    var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now()};
+    var disc = Number(discountAmount) || 0;
+    var finalTotal = Math.max(0, (order.total || 0) - disc);
+    var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now(), total: finalTotal};
+    if (disc > 0) {
+      payData.discount = disc;
+      payData.originalTotal = order.total;
+    }
     if (mixData) {
       payData.paymentMethod = 'mixto';
       payData.mixEfectivo = mixData.efectivo;
@@ -3215,15 +3230,25 @@ function CajaPage({
       payData.mixOtroMetodo = mixData.otroMetodo;
     }
     if (order._groupOrders) {
-      order._groupOrders.forEach(function(o) { onUpdateOrder(o.id, payData); });
+      // Apply discount only to the first order, rest keep their total
+      var firstDone = false;
+      order._groupOrders.forEach(function(o) {
+        if (!firstDone && disc > 0) {
+          onUpdateOrder(o.id, Object.assign({}, payData));
+          firstDone = true;
+        } else {
+          onUpdateOrder(o.id, {status: 'paid', paymentMethod: payData.paymentMethod, paidAt: payData.paidAt, mixEfectivo: payData.mixEfectivo, mixOtro: payData.mixOtro, mixOtroMetodo: payData.mixOtroMetodo});
+        }
+      });
     } else {
       onUpdateOrder(order.id, payData);
     }
     setPayingOrder(null);
     setMixMode(false);
     setMixEfectivo('');
+    setDiscountAmount('');
     setReceiptOrder(order);
-    var ticketOrder = Object.assign({}, order, payData);
+    var ticketOrder = Object.assign({}, order, payData, {total: finalTotal});
     silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(ticketOrder) + '</body></html>');
   }
   // Group unpaid orders by mesa/vehicle for "Por Mesa" view
@@ -3820,7 +3845,7 @@ function CajaPage({
     onClick: () => setReceiptOrder(null)
   }, "Cerrar")))), payingOrder && /*#__PURE__*/React.createElement("div", {
     className: "modal-overlay",
-    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); }
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); }
   }, /*#__PURE__*/React.createElement("div", {
     className: "modal",
     onClick: e => e.stopPropagation(),
@@ -3829,9 +3854,27 @@ function CajaPage({
   /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCB0 Cobrar Pedido"),
   /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', marginBottom: 6}},
     /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem'}}, "#", payingOrder.orderNum || '----', " \u2014 ", payingOrder.waiter || ''),
-    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.4rem', marginTop: 4, color: 'var(--primary)'}}, formatGs(payingOrder.total))
+    Number(discountAmount) > 0 ? /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', color: 'var(--gray3)', textDecoration: 'line-through'}}, formatGs(payingOrder.total)),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--danger)', fontWeight: 600}}, "- ", formatGs(Number(discountAmount)), " descuento"),
+      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.4rem', marginTop: 2, color: 'var(--success)'}}, formatGs(Math.max(0, payingOrder.total - Number(discountAmount))))
+    ) : /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.4rem', marginTop: 4, color: 'var(--primary)'}}, formatGs(payingOrder.total))
   ),
-  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '10px 0'}}),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, alignItems: 'center', margin: '8px 0', padding: '8px 10px', background: '#fff8e1', borderRadius: 8, border: '1px dashed #ffb300'}},
+    /*#__PURE__*/React.createElement("span", {style: {fontSize: '.8rem', fontWeight: 600, color: '#f57f17', whiteSpace: 'nowrap'}}, "\uD83C\uFF8A Descuento Gs."),
+    /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      value: discountAmount,
+      onChange: function(e) { setDiscountAmount(e.target.value); },
+      placeholder: "0",
+      style: {flex: 1, padding: '6px 10px', border: '1px solid #ffb300', borderRadius: 6, fontFamily: 'inherit', fontSize: '.9rem', fontWeight: 700}
+    }),
+    Number(discountAmount) > 0 && /*#__PURE__*/React.createElement("button", {
+      onClick: function() { setDiscountAmount(''); },
+      style: {background: 'none', border: 'none', fontSize: '1rem', cursor: 'pointer', color: 'var(--danger)', padding: '2px 6px'}
+    }, "\u2715")
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '6px 0'}}),
   !mixMode ? /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', color: 'var(--gray3)', marginBottom: 12}}, "M\xE9todo de pago:"),
     /*#__PURE__*/React.createElement("div", {style: {display: 'flex', flexDirection: 'column', gap: 8}},
@@ -3915,7 +3958,7 @@ function CajaPage({
   !mixMode && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline",
     style: {marginTop: 10, width: '100%'},
-    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); }
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); }
   }, "Cancelar"))),
 
   /* === INJECTION MODAL === */
@@ -3978,7 +4021,8 @@ function CajaPage({
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB3 Tarjeta:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.tarjeta))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.qr))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uDFE6 Transferencia:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.transferencia))),
-    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:6, paddingTop:6, borderTop:'1px solid #a5d6a7'}}, /*#__PURE__*/React.createElement("span",null,"Total vendido:"), /*#__PURE__*/React.createElement("span",null, formatGs(myShiftSales.total)))
+    myShiftSales.discounts > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', color:'#c62828'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uFF8A Descuentos aplicados:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, "-", formatGs(myShiftSales.discounts))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:6, paddingTop:6, borderTop:'1px solid #a5d6a7'}}, /*#__PURE__*/React.createElement("span",null,"Total cobrado:"), /*#__PURE__*/React.createElement("span",null, formatGs(myShiftSales.total)))
   ),
   /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fff3e0', border: '2px solid var(--warning)'}},
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCB5 Efectivo en caja:"),
@@ -4004,7 +4048,7 @@ function CajaPage({
       onClick: function() {
         if (confirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.')) {
           closeShift();
-          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
+          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalDiscounts: myShiftSales.discounts, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
         }
       }
     }, "\uD83D\uDD12 Confirmar Cierre e Imprimir"),

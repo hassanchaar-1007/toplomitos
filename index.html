@@ -1006,7 +1006,7 @@ function generateCashierTicketHtml(order) {
     '<div class="r b big"><span>TOTAL</span><span>' + formatGs(order.total) + '</span></div>' +
     '<div class="ln"></div>' +
     (order.notes ? '<div>Nota: ' + order.notes + '</div><div class="ln"></div>' : '') +
-    (order.paymentMethod === 'mixto' ? '<div class="ln"></div><div class="b" style="margin-top:4px">Pago Mixto:</div><div class="r"><span>\uD83D\uDCB5 Efectivo</span><span>' + formatGs(order.mixEfectivo || 0) + '</span></div><div class="r"><span>' + (order.mixOtroMetodo === 'qr' ? '\uD83D\uDCF1 QR' : '\uD83D\uDCB3 Tarjeta') + '</span><span>' + formatGs(order.mixOtro || 0) + '</span></div><div class="ln"></div>' : order.paymentMethod ? '<div class="c b" style="margin-top:4px">Pago: ' + (order.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : order.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR/Transfer.' : '\uD83D\uDCB5 Efectivo') + '</div><div class="ln"></div>' : '') +
+    (order.paymentMethod === 'mixto' ? '<div class="ln"></div><div class="b" style="margin-top:4px">Pago Mixto:</div><div class="r"><span>\uD83D\uDCB5 Efectivo</span><span>' + formatGs(order.mixEfectivo || 0) + '</span></div><div class="r"><span>' + (order.mixOtroMetodo === 'qr' ? '\uD83D\uDCF1 QR' : order.mixOtroMetodo === 'transferencia' ? '\uD83C\uDFE6 Transferencia' : '\uD83D\uDCB3 Tarjeta') + '</span><span>' + formatGs(order.mixOtro || 0) + '</span></div><div class="ln"></div>' : order.paymentMethod ? '<div class="c b" style="margin-top:4px">Pago: ' + (order.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : order.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : order.paymentMethod === 'transferencia' ? '\uD83C\uDFE6 Transferencia' : '\uD83D\uDCB5 Efectivo') + '</div><div class="ln"></div>' : '') +
     '<div class="c" style="margin-top:8px">Gracias por la preferencia!</div>' +
     '</div>';
 }
@@ -2060,8 +2060,9 @@ function TVDashboard({orders, now, onExit}) {
   const todayOrders = orders.filter(o => o.date === todayStr());
   const pending = todayOrders.filter(o => o.status === 'pending');
   const preparing = todayOrders.filter(o => o.status === 'preparing');
-  const ready = todayOrders.filter(o => o.status === 'ready' || o.status === 'served');
-  const paid = todayOrders.filter(o => o.status === 'paid');
+  const ready = todayOrders.filter(o => o.status === 'ready');
+  const served = todayOrders.filter(o => o.status === 'served');
+  const paid = todayOrders.filter(o => o.status === 'paid' || o.status === 'served');
 
   function renderCard(o, borderColor, extraClass) {
     return /*#__PURE__*/React.createElement("div", {
@@ -3085,8 +3086,8 @@ function CajaPage({
 
   // Calculate shift-specific sales
   var myShiftSales = useMemo(function() {
-    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0};
-    var result = {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0};
+    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0};
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0};
     paidToday.forEach(function(o) {
       if (o.paidAt && o.paidAt >= myOpenShift.startedAt) {
         result.total += (o.total || 0);
@@ -3111,6 +3112,7 @@ function CajaPage({
       salesEfectivo: myShiftSales.efectivo,
       salesTarjeta: myShiftSales.tarjeta,
       salesQr: myShiftSales.qr,
+      salesTransferencia: myShiftSales.transferencia,
       salesTotal: myShiftSales.total,
       salesCount: myShiftSales.count,
       totalInjections: injectionsTotal
@@ -3138,16 +3140,23 @@ function CajaPage({
       '<div class="b">VENTAS (' + (shift.salesCount || 0) + ' pedidos)</div>' +
       '<div class="r"><span>\uD83D\uDCB5 Efectivo:</span><span>' + formatGs(shift.salesEfectivo || 0) + '</span></div>' +
       '<div class="r"><span>\uD83D\uDCB3 Tarjeta:</span><span>' + formatGs(shift.salesTarjeta || 0) + '</span></div>' +
-      '<div class="r"><span>\uD83D\uDCF1 QR/Transfer:</span><span>' + formatGs(shift.salesQr || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCF1 QR:</span><span>' + formatGs(shift.salesQr || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83C\uDFE6 Transferencia:</span><span>' + formatGs(shift.salesTransferencia || 0) + '</span></div>' +
       '<div class="r b big"><span>Total vendido:</span><span>' + formatGs(shift.salesTotal || 0) + '</span></div>' +
       '<div class="ln"></div>' +
-      '<div class="b">RESUMEN DE CAJA FISICA</div>' +
-      '<div class="r"><span>Sencillo + inyecciones:</span><span>' + formatGs((shift.openingFloat || 0) + injectionsTotal) + '</span></div>' +
+      '<div class="b">EFECTIVO EN CAJA</div>' +
+      '<div class="r"><span>Sencillo inicial:</span><span>' + formatGs(shift.openingFloat || 0) + '</span></div>' +
+      '<div class="r"><span>+ Inyecciones:</span><span>' + formatGs(injectionsTotal) + '</span></div>' +
       '<div class="r"><span>+ Ventas efectivo:</span><span>' + formatGs(shift.salesEfectivo || 0) + '</span></div>' +
       '<div class="r b" style="font-size:16px;margin-top:4px"><span>TOTAL EN CAJA:</span><span>' + formatGs(cashInRegister) + '</span></div>' +
       '<div class="ln"></div>' +
       '<div class="r"><span>Llevar a caja fuerte:</span><span class="b">' + formatGs(cashToSafe) + '</span></div>' +
       '<div class="r"><span>Queda sencillo:</span><span class="b">' + formatGs((shift.openingFloat || 0) + injectionsTotal) + '</span></div>' +
+      '<div class="ln"></div>' +
+      '<div class="b">COMPROBANTES A VERIFICAR</div>' +
+      '<div class="r"><span>\uD83D\uDCB3 Vouchers tarjeta:</span><span>' + formatGs(shift.salesTarjeta || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83D\uDCF1 Comprobantes QR:</span><span>' + formatGs(shift.salesQr || 0) + '</span></div>' +
+      '<div class="r"><span>\uD83C\uDFE6 Comprobantes transf.:</span><span>' + formatGs(shift.salesTransferencia || 0) + '</span></div>' +
       '<div class="ln"></div><div class="c">Firma cajera: _______________</div>' +
       '</div></body></html>';
     silentPrint(html);
@@ -3155,11 +3164,12 @@ function CajaPage({
 
   function printReporteFinal() {
     var allClosed = closedShifts;
-    var totals = {efectivo: 0, tarjeta: 0, qr: 0, total: 0, count: 0, floats: 0, injections: 0};
+    var totals = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, floats: 0, injections: 0};
     allClosed.forEach(function(s) {
       totals.efectivo += (s.salesEfectivo || 0);
       totals.tarjeta += (s.salesTarjeta || 0);
       totals.qr += (s.salesQr || 0);
+      totals.transferencia += (s.salesTransferencia || 0);
       totals.total += (s.salesTotal || 0);
       totals.count += (s.salesCount || 0);
       totals.floats += (s.openingFloat || 0);
@@ -3174,6 +3184,7 @@ function CajaPage({
           '<div class="r"><span>Efectivo:</span><span>' + formatGs(s.salesEfectivo || 0) + '</span></div>' +
           '<div class="r"><span>Tarjeta:</span><span>' + formatGs(s.salesTarjeta || 0) + '</span></div>' +
           '<div class="r"><span>QR:</span><span>' + formatGs(s.salesQr || 0) + '</span></div>' +
+          '<div class="r"><span>Transferencia:</span><span>' + formatGs(s.salesTransferencia || 0) + '</span></div>' +
           '<div class="r b"><span>Subtotal:</span><span>' + formatGs(s.salesTotal || 0) + '</span></div>' +
           '<div class="ln"></div>';
       }).join('') +
@@ -3182,6 +3193,7 @@ function CajaPage({
       '<div class="r"><span>\uD83D\uDCB5 Total efectivo:</span><span>' + formatGs(totals.efectivo) + '</span></div>' +
       '<div class="r"><span>\uD83D\uDCB3 Total tarjeta:</span><span>' + formatGs(totals.tarjeta) + '</span></div>' +
       '<div class="r"><span>\uD83D\uDCF1 Total QR:</span><span>' + formatGs(totals.qr) + '</span></div>' +
+      '<div class="r"><span>\uD83C\uDFE6 Total transferencia:</span><span>' + formatGs(totals.transferencia) + '</span></div>' +
       '<div class="ln"></div>' +
       '<div class="r b big"><span>FACTURACION TOTAL:</span><span>' + formatGs(totals.total) + '</span></div>' +
       '<div class="ln"></div>' +
@@ -3228,7 +3240,7 @@ function CajaPage({
     return Object.values(groups).filter(g => g.orders.length > 0);
   }, [orders]);
   const salesByMethod = useMemo(function() {
-    var result = {efectivo: 0, tarjeta: 0, qr: 0, total: 0};
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0};
     paidToday.forEach(function(o) {
       result.total += (o.total || 0);
       if (o.paymentMethod === 'mixto') {
@@ -3410,8 +3422,12 @@ function CajaPage({
       /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#0d47a1'}}, formatGs(salesByMethod.tarjeta))
     ),
     /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 100, padding: '8px 10px', background: '#e1bee7', borderRadius: 8, textAlign: 'center'}},
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#7b1fa2', fontWeight: 600}}, "\uD83D\uDCF1 QR / TRANSFER"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#7b1fa2', fontWeight: 600}}, "\uD83D\uDCF1 QR"),
       /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#4a148c'}}, formatGs(salesByMethod.qr))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 100, padding: '8px 10px', background: '#b2dfdb', borderRadius: 8, textAlign: 'center'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: '#00695c', fontWeight: 600}}, "\uD83C\uDFE6 TRANSFERENCIA"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, color: '#004d40'}}, formatGs(salesByMethod.transferencia))
     )
   )), /*#__PURE__*/React.createElement("div", {
     className: "menu-cats",
@@ -3552,7 +3568,7 @@ function CajaPage({
     onClick: () => setPayingOrder(o)
   }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
     style: {fontSize: '.7rem', color: 'var(--gray3)', fontWeight: 600}
-  }, o.paymentMethod === 'mixto' ? '\uD83D\uDD00 Mixto' : o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : '\uD83D\uDCB5 Efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
+  }, o.paymentMethod === 'mixto' ? '\uD83D\uDD00 Mixto' : o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : o.paymentMethod === 'transferencia' ? '\uD83C\uDFE6 Transf.' : '\uD83D\uDCB5 Efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => setReceiptOrder(o)
   }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
@@ -3826,7 +3842,12 @@ function CajaPage({
         className: "btn",
         style: {padding: '14px', fontSize: '1rem', background: '#7b1fa2', color: '#fff'},
         onClick: function() { cobrarConMetodo(payingOrder, 'qr'); }
-      }, "\uD83D\uDCF1 QR / Transferencia"),
+      }, "\uD83D\uDCF1 QR"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn",
+        style: {padding: '14px', fontSize: '1rem', background: '#00695c', color: '#fff'},
+        onClick: function() { cobrarConMetodo(payingOrder, 'transferencia'); }
+      }, "\uD83C\uDFE6 Transferencia"),
       /*#__PURE__*/React.createElement("button", {
         className: "btn btn-outline",
         style: {padding: '12px', fontSize: '.9rem', marginTop: 4, borderStyle: 'dashed'},
@@ -3859,17 +3880,22 @@ function CajaPage({
     ),
     Number(mixEfectivo) > 0 && Number(mixEfectivo) < payingOrder.total && /*#__PURE__*/React.createElement("div", null,
       /*#__PURE__*/React.createElement("p", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 6, textAlign: 'center'}}, "Resto (", formatGs(payingOrder.total - Number(mixEfectivo)), ") pagar con:"),
-      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6}},
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, flexWrap: 'wrap'}},
         /*#__PURE__*/React.createElement("button", {
           className: "btn",
-          style: {flex: 1, padding: '12px', background: '#1565c0', color: '#fff', fontSize: '.9rem'},
+          style: {flex: 1, minWidth: 90, padding: '12px', background: '#1565c0', color: '#fff', fontSize: '.9rem'},
           onClick: function() { cobrarConMetodo(payingOrder, 'mixto', {efectivo: Number(mixEfectivo), otro: payingOrder.total - Number(mixEfectivo), otroMetodo: 'tarjeta'}); }
         }, "\uD83D\uDCB3 Tarjeta"),
         /*#__PURE__*/React.createElement("button", {
           className: "btn",
-          style: {flex: 1, padding: '12px', background: '#7b1fa2', color: '#fff', fontSize: '.9rem'},
+          style: {flex: 1, minWidth: 90, padding: '12px', background: '#7b1fa2', color: '#fff', fontSize: '.9rem'},
           onClick: function() { cobrarConMetodo(payingOrder, 'mixto', {efectivo: Number(mixEfectivo), otro: payingOrder.total - Number(mixEfectivo), otroMetodo: 'qr'}); }
-        }, "\uD83D\uDCF1 QR")
+        }, "\uD83D\uDCF1 QR"),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn",
+          style: {flex: 1, minWidth: 90, padding: '12px', background: '#00695c', color: '#fff', fontSize: '.9rem'},
+          onClick: function() { cobrarConMetodo(payingOrder, 'mixto', {efectivo: Number(mixEfectivo), otro: payingOrder.total - Number(mixEfectivo), otroMetodo: 'transferencia'}); }
+        }, "\uD83C\uDFE6 Transf.")
       )
     ),
     Number(mixEfectivo) >= payingOrder.total && /*#__PURE__*/React.createElement("p", {style: {color: 'var(--danger)', fontSize: '.85rem', textAlign: 'center'}}, "El monto en efectivo cubre el total. Us\xE1 el bot\xF3n de Efectivo."),
@@ -3944,12 +3970,25 @@ function CajaPage({
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB5 Efectivo:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.efectivo))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB3 Tarjeta:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.tarjeta))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.qr))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uDFE6 Transferencia:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.transferencia))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:6, paddingTop:6, borderTop:'1px solid #a5d6a7'}}, /*#__PURE__*/React.createElement("span",null,"Total vendido:"), /*#__PURE__*/React.createElement("span",null, formatGs(myShiftSales.total)))
   ),
-  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 12, background: '#fff3e0', border: '2px solid var(--warning)'}},
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fff3e0', border: '2px solid var(--warning)'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCB5 Efectivo en caja:"),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"Sencillo + inyecciones:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"+ Ventas efectivo:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.efectivo))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:4, paddingTop:4, borderTop:'1px dashed #ccc'}}, /*#__PURE__*/React.createElement("span",null,"Total f\xEDsico en caja:"), /*#__PURE__*/React.createElement("span",null, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0) + myShiftSales.efectivo)))
+  ),
+  /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fce4ec'}},
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCE6 Al cerrar turno:"),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"Llevar a caja fuerte:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800, color:'var(--danger)', fontSize:'1.1rem'}}, formatGs(myShiftSales.efectivo))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', marginTop:4}}, /*#__PURE__*/React.createElement("span",null,"Queda sencillo en caja:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0))))
+  ),
+  (myShiftSales.tarjeta > 0 || myShiftSales.qr > 0 || myShiftSales.transferencia > 0) && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 12, background: '#e3f2fd'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCCB Comprobantes a verificar:"),
+    myShiftSales.tarjeta > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCB3 Vouchers tarjeta:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.tarjeta))),
+    myShiftSales.qr > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 Comprobantes QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.qr))),
+    myShiftSales.transferencia > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uDFE6 Comprobantes transf.:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.transferencia)))
   ),
   /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
     /*#__PURE__*/React.createElement("button", {
@@ -3958,7 +3997,7 @@ function CajaPage({
       onClick: function() {
         if (confirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.')) {
           closeShift();
-          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
+          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
         }
       }
     }, "\uD83D\uDD12 Confirmar Cierre e Imprimir"),

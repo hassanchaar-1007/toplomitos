@@ -1882,7 +1882,8 @@ function AppMain({
     clockRecords: clockRecords,
     addClockRecord: addClockRecord,
     updateClockRecord: updateClockRecord,
-    now: now
+    now: now,
+    userRole: user.role
   }), page === 'historial' && /*#__PURE__*/React.createElement(HistorialPage, {
     allOrders: orders
   }), page === 'empleados' && /*#__PURE__*/React.createElement(EmpleadosPage, {
@@ -4284,10 +4285,14 @@ function MarcacionPage({
   clockRecords,
   addClockRecord,
   updateClockRecord,
-  now
+  now,
+  userRole
 }) {
   const [pin, setPin] = useState('');
   const [message, setMessage] = useState(null);
+  const [marcTab, setMarcTab] = useState('hoy');
+  const [histDays, setHistDays] = useState(7);
+  const [histEmployee, setHistEmployee] = useState('todos');
   function handleClock() {
     const emp = employees.find(e => e.pin === pin);
     if (!emp) {
@@ -4332,20 +4337,8 @@ function MarcacionPage({
     setTimeout(() => setMessage(null), 4000);
   }
   const todayRecords = clockRecords.filter(r => r.date === now.toDateString());
-  return /*#__PURE__*/React.createElement("div", {
-    className: "fade-in",
-    style: {
-      maxWidth: 600,
-      margin: '0 auto'
-    }
-  }, /*#__PURE__*/React.createElement("h2", {
-    style: {
-      fontWeight: 800,
-      marginBottom: 16,
-      textAlign: 'center',
-      fontSize: '1.2rem'
-    }
-  }, "\u23F0 Marcaci\xF3n"), /*#__PURE__*/React.createElement("div", {
+
+  var clockUI = /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       textAlign: 'center'
@@ -4405,7 +4398,9 @@ function MarcacionPage({
       fontWeight: 600,
       fontSize: '.9rem'
     }
-  }, message.text)), todayRecords.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, message.text));
+
+  var todayUI = todayRecords.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginTop: 14
@@ -4462,6 +4457,156 @@ function MarcacionPage({
       }
     }, hrs, "h")));
   })));
+
+  // === HISTORIAL DE MARCACIONES ===
+  var histRecords = useMemo(function() {
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - histDays);
+    return clockRecords.filter(function(r) {
+      if (histEmployee !== 'todos' && r.employeeName !== histEmployee) return false;
+      var recDate = new Date(r.clockIn);
+      return recDate >= cutoff;
+    }).sort(function(a, b) { return new Date(b.clockIn) - new Date(a.clockIn); });
+  }, [clockRecords, histDays, histEmployee]);
+
+  // Group by date
+  var histByDate = useMemo(function() {
+    var groups = {};
+    histRecords.forEach(function(r) {
+      var d = new Date(r.clockIn).toLocaleDateString('es-PY', {weekday: 'short', day: 'numeric', month: 'short'});
+      if (!groups[d]) groups[d] = {date: d, records: [], sortKey: new Date(r.clockIn).toDateString()};
+      groups[d].records.push(r);
+    });
+    return Object.values(groups).sort(function(a, b) { return new Date(b.sortKey) - new Date(a.sortKey); });
+  }, [histRecords]);
+
+  // Unique employee names
+  var empNames = useMemo(function() {
+    var names = {};
+    clockRecords.forEach(function(r) { if (r.employeeName) names[r.employeeName] = true; });
+    return Object.keys(names).sort();
+  }, [clockRecords]);
+
+  // Employee summary for period
+  var empSummary = useMemo(function() {
+    var summary = {};
+    histRecords.forEach(function(r) {
+      if (!summary[r.employeeName]) summary[r.employeeName] = {name: r.employeeName, role: r.role, days: {}, totalHrs: 0};
+      var dayKey = new Date(r.clockIn).toDateString();
+      summary[r.employeeName].days[dayKey] = true;
+      if (r.clockOut) {
+        summary[r.employeeName].totalHrs += (new Date(r.clockOut) - new Date(r.clockIn)) / 3600000;
+      }
+    });
+    return Object.values(summary).sort(function(a, b) { return b.totalHrs - a.totalHrs; });
+  }, [histRecords]);
+
+  return /*#__PURE__*/React.createElement("div", {className: "fade-in", style: {maxWidth: 600, margin: '0 auto'}},
+    /*#__PURE__*/React.createElement("h2", {style: {fontWeight: 800, marginBottom: 12, textAlign: 'center', fontSize: '1.2rem'}}, "\u23F0 Marcaci\xF3n"),
+
+    /* Tabs */
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 14}},
+      /*#__PURE__*/React.createElement("button", {
+        className: 'btn' + (marcTab === 'hoy' ? ' btn-primary' : ' btn-outline'),
+        style: {flex: 1, padding: '10px'},
+        onClick: function() { setMarcTab('hoy'); }
+      }, "\uD83D\uDCCC Hoy"),
+      (userRole === 'admin' || userRole === 'cajera') && /*#__PURE__*/React.createElement("button", {
+        className: 'btn' + (marcTab === 'historial' ? ' btn-primary' : ' btn-outline'),
+        style: {flex: 1, padding: '10px'},
+        onClick: function() { setMarcTab('historial'); }
+      }, "\uD83D\uDCCB Historial"),
+      (userRole === 'admin' || userRole === 'cajera') && /*#__PURE__*/React.createElement("button", {
+        className: 'btn' + (marcTab === 'resumen' ? ' btn-primary' : ' btn-outline'),
+        style: {flex: 1, padding: '10px'},
+        onClick: function() { setMarcTab('resumen'); }
+      }, "\uD83D\uDCCA Resumen")
+    ),
+
+    /* TAB: HOY */
+    marcTab === 'hoy' && /*#__PURE__*/React.createElement("div", null, clockUI, todayUI),
+
+    /* TAB: HISTORIAL */
+    marcTab === 'historial' && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 12}},
+        /*#__PURE__*/React.createElement("select", {
+          value: histDays,
+          onChange: function(e) { setHistDays(Number(e.target.value)); },
+          style: {flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray)', fontFamily: 'inherit'}
+        },
+          /*#__PURE__*/React.createElement("option", {value: 7}, "\xDAltimos 7 d\xEDas"),
+          /*#__PURE__*/React.createElement("option", {value: 14}, "\xDAltimos 14 d\xEDas"),
+          /*#__PURE__*/React.createElement("option", {value: 30}, "\xDAltimos 30 d\xEDas")
+        ),
+        /*#__PURE__*/React.createElement("select", {
+          value: histEmployee,
+          onChange: function(e) { setHistEmployee(e.target.value); },
+          style: {flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray)', fontFamily: 'inherit'}
+        },
+          /*#__PURE__*/React.createElement("option", {value: 'todos'}, "Todos"),
+          empNames.map(function(n) { return /*#__PURE__*/React.createElement("option", {key: n, value: n}, n); })
+        )
+      ),
+      histByDate.length === 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 20, textAlign: 'center', color: 'var(--gray3)'}}, "Sin registros en este per\xEDodo"),
+      histByDate.map(function(day) {
+        return /*#__PURE__*/React.createElement("div", {key: day.date, style: {marginBottom: 12}},
+          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.85rem', color: 'var(--dark2)', marginBottom: 6, padding: '4px 8px', background: '#f5f5f5', borderRadius: 6}}, "\uD83D\uDCC5 ", day.date),
+          day.records.map(function(r, idx) {
+            var inT = new Date(r.clockIn);
+            var outT = r.clockOut ? new Date(r.clockOut) : null;
+            var hrs = outT ? ((outT - inT) / 3600000).toFixed(1) : null;
+            return /*#__PURE__*/React.createElement("div", {key: r._key || idx, style: {
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '8px 10px', borderBottom: '1px solid #f0f0f0', fontSize: '.85rem'
+            }},
+              /*#__PURE__*/React.createElement("div", null,
+                /*#__PURE__*/React.createElement("span", {style: {fontWeight: 600}}, r.employeeName),
+                /*#__PURE__*/React.createElement("span", {style: {fontSize: '.7rem', color: 'var(--gray3)', marginLeft: 6}}, ROLE_LABELS[r.role])
+              ),
+              /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right'}},
+                /*#__PURE__*/React.createElement("span", null, inT.toLocaleTimeString('es-PY', {hour: '2-digit', minute: '2-digit'})),
+                /*#__PURE__*/React.createElement("span", {style: {margin: '0 4px'}}, "\u2192"),
+                outT ? /*#__PURE__*/React.createElement("span", null, outT.toLocaleTimeString('es-PY', {hour: '2-digit', minute: '2-digit'})) :
+                  /*#__PURE__*/React.createElement("span", {style: {color: 'var(--warning)', fontWeight: 600}}, "Sin salida"),
+                hrs && /*#__PURE__*/React.createElement("span", {style: {marginLeft: 6, fontWeight: 600, color: 'var(--success)'}}, hrs, "h")
+              )
+            );
+          })
+        );
+      })
+    ),
+
+    /* TAB: RESUMEN */
+    marcTab === 'resumen' && /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {marginBottom: 12}},
+        /*#__PURE__*/React.createElement("select", {
+          value: histDays,
+          onChange: function(e) { setHistDays(Number(e.target.value)); },
+          style: {width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--gray)', fontFamily: 'inherit'}
+        },
+          /*#__PURE__*/React.createElement("option", {value: 7}, "\xDAltimos 7 d\xEDas"),
+          /*#__PURE__*/React.createElement("option", {value: 14}, "\xDAltimos 14 d\xEDas"),
+          /*#__PURE__*/React.createElement("option", {value: 30}, "\xDAltimos 30 d\xEDas")
+        )
+      ),
+      empSummary.length === 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 20, textAlign: 'center', color: 'var(--gray3)'}}, "Sin registros"),
+      empSummary.map(function(emp) {
+        var daysWorked = Object.keys(emp.days).length;
+        return /*#__PURE__*/React.createElement("div", {key: emp.name, className: "card", style: {padding: 14, marginBottom: 8}},
+          /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}},
+            /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.95rem'}}, emp.name),
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}}, ROLE_LABELS[emp.role])
+            ),
+            /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right'}},
+              /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary)'}}, emp.totalHrs.toFixed(1), "h"),
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}}, daysWorked, " d\xEDa", daysWorked !== 1 ? 's' : '', " trabajado", daysWorked !== 1 ? 's' : '')
+            )
+          )
+        );
+      })
+    )
+  );
 }
 
 // ============== HISTORIAL ==============

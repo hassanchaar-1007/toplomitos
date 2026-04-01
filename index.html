@@ -3239,9 +3239,9 @@ function CajaPage({
     });
     return Object.values(groups).filter(g => g.orders.length > 0);
   }, [orders]);
-  // When shift is open, show only shift sales; otherwise show all day
+  // When shift is open, show only shift sales; no shift = no sales shown
   var shiftPaid = useMemo(function() {
-    if (!myOpenShift) return paidToday;
+    if (!myOpenShift) return [];
     return paidToday.filter(function(o) { return o.paidAt && o.paidAt >= myOpenShift.startedAt; });
   }, [paidToday, myOpenShift]);
   const salesByMethod = useMemo(function() {
@@ -3356,8 +3356,8 @@ function CajaPage({
     /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6, fontWeight: 700}}, "Ventas turno: ", formatGs(myShiftSales.total), " (", myShiftSales.count, " ped.)")
   )),
 
-  /* === ADMIN: REPORTE FINAL === */
-  isAdmin && closedShifts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10}},
+  /* === REPORTE FINAL (admin + cajeras) === */
+  closedShifts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10}},
     /*#__PURE__*/React.createElement("button", {
       className: "btn btn-outline btn-sm",
       style: {fontSize: '.78rem'},

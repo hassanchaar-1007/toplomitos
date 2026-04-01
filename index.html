@@ -3241,7 +3241,41 @@ function CajaPage({
     });
     return result;
   }, [paidToday]);
-  const shown = filter === 'unpaid' ? unpaidOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
+  // Group orders: parent + agregados shown as single entry
+  function groupWithAgregados(orderList) {
+    var groups = {};
+    var standalone = [];
+    orderList.forEach(function(o) {
+      var baseNum = o.parentOrderNum || o.orderNum;
+      if (o.isAgregado && o.parentOrderNum) {
+        if (!groups[o.parentOrderNum]) groups[o.parentOrderNum] = {parent: null, children: []};
+        groups[o.parentOrderNum].children.push(o);
+      } else {
+        if (!groups[baseNum]) groups[baseNum] = {parent: null, children: []};
+        groups[baseNum].parent = o;
+      }
+    });
+    var result = [];
+    Object.keys(groups).forEach(function(key) {
+      var g = groups[key];
+      var allOrds = (g.parent ? [g.parent] : []).concat(g.children);
+      if (allOrds.length === 0) return;
+      if (allOrds.length === 1) { result.push(allOrds[0]); return; }
+      var base = g.parent || allOrds[0];
+      var allItems = allOrds.flatMap(function(o) { return ensureArray(o.items); });
+      var totalSum = allOrds.reduce(function(s, o) { return s + (o.total || 0); }, 0);
+      result.push(Object.assign({}, base, {
+        items: allItems,
+        total: totalSum,
+        _groupOrders: allOrds,
+        _agregadoCount: g.children.length
+      }));
+    });
+    // Add orders that weren't in any group
+    return result.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  }
+  const shownRaw = filter === 'unpaid' ? unpaidOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
+  const shown = (filter === 'paid' || filter === 'cancelled') ? shownRaw : groupWithAgregados(shownRaw);
   return /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -3452,7 +3486,9 @@ function CajaPage({
     style: {
       fontWeight: 800
     }
-  }, "#", o.orderNum || '----'), /*#__PURE__*/React.createElement("span", {
+  }, "#", o.orderNum || '----'), o._agregadoCount && /*#__PURE__*/React.createElement("span", {
+    style: {marginLeft: 6, background: 'var(--secondary)', color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: '.7rem', fontWeight: 700}
+  }, "+", o._agregadoCount, " agregado", o._agregadoCount > 1 ? 's' : ''), /*#__PURE__*/React.createElement("span", {
     style: {
       marginLeft: 8,
       fontSize: '.8rem'

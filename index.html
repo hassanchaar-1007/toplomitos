@@ -1778,6 +1778,8 @@ function AppMain({
     fbUpdate('preOrders/' + preOrderKey, {status: 'accepted', acceptedBy: user.name, acceptedAt: Date.now()});
     // Assign mozo to this mesa
     fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
+    // Remove notification
+    setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== preOrderKey; }); });
     // Open pre-order for review
     setPendingPreOrder(po);
   }
@@ -1804,6 +1806,8 @@ function AppMain({
     fbUpdate('mesaCalls/' + callKey, {status: 'attended', attendedBy: user.name, attendedAt: Date.now()});
     // Assign mozo to this mesa
     fbUpdate('mesaAssignments/' + dateKey + '/' + mesa, {mozo: user.name, assignedAt: Date.now()});
+    // Remove notification
+    setNotifications(function(n) { return n.filter(function(x) { return x.callKey !== callKey; }); });
   }
 
   // Notify admin+prep when shopping list is finalized/purchasing/received

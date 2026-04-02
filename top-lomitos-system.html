@@ -233,6 +233,22 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
 .cli-option-btn:active{transform:scale(.97);opacity:.9}
 .cli-success{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
 .cli-success-card{background:#fff;border-radius:20px;padding:36px;text-align:center;max-width:340px;margin:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+/* ===== MESA STATUS PANEL ===== */
+.mesa-panel{background:#fff;border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+.mesa-panel-title{display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-weight:800;font-size:.95rem;color:#1d3557}
+.mesa-panel-toggle{background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px 8px;color:#6c757d}
+.mesa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
+.mesa-chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;font-size:.8rem;font-weight:600;transition:.2s}
+.mesa-chip.empty{background:#ffeef0;color:#c1121f;border:1.5px solid #f5c6cb}
+.mesa-chip.occupied{background:#e8f5e9;color:#2d6a4f;border:1.5px solid #a5d6a7}
+.mesa-chip.calling{background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80;animation:mesaPulse 1.5s infinite}
+.mesa-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mesa-dot.red{background:#e63946}
+.mesa-dot.green{background:#2d6a4f}
+.mesa-dot.orange{background:#e65100}
+.mesa-mozo{font-size:.7rem;font-weight:400;color:#6c757d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px}
+@keyframes mesaPulse{0%,100%{box-shadow:0 0 0 0 rgba(230,81,0,.3)}50%{box-shadow:0 0 8px 2px rgba(230,81,0,.2)}}
+@media(max-width:768px){.mesa-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}}
 </style>
 </head>
 <body>
@@ -2217,7 +2233,11 @@ function AppMain({
     }
   }, cajaBadge)))), /*#__PURE__*/React.createElement("main", {
     className: "main-content"
-  }, page === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
+  }, (user.role === 'admin' || user.role === 'mozo_interior' || user.role === 'cajera') && (page === 'dashboard' || page === 'pedidos' || page === 'caja') && /*#__PURE__*/React.createElement(MesaStatusPanel, {
+    activeOrders: activeOrders,
+    mesaAssignments: mesaAssignments,
+    todayCalls: todayCalls
+  }), page === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
     orders: todayOrders,
     activeOrders: activeOrders,
     stock: stock,
@@ -2527,6 +2547,42 @@ function TVDashboard({orders, now, onExit}) {
         ready.length === 0 ?
           /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', opacity: .3, padding: 20, fontSize: '.9rem'}}, "Ninguno listo aún") :
           ready.map(o => renderCard(o, '#81c784', 'tv-ready')))));
+}
+
+function MesaStatusPanel({ activeOrders, mesaAssignments, todayCalls }) {
+  var _exp = useState(true), expanded = _exp[0], setExpanded = _exp[1];
+  var TOTAL_MESAS = 17;
+  var mesas = [];
+  for (var i = 1; i <= TOTAL_MESAS; i++) {
+    var num = String(i);
+    var hasOrder = activeOrders.some(function(o) { return o.type === 'mesa' && String(o.tableNum) === num && o.status !== 'paid'; });
+    var assignment = mesaAssignments[num];
+    var isCalling = todayCalls && todayCalls.some(function(c) { return String(c.mesa) === num; });
+    mesas.push({ num: i, occupied: hasOrder || (assignment && assignment.mozo), mozo: assignment ? assignment.mozo : null, calling: isCalling });
+  }
+  var occupiedCount = mesas.filter(function(m) { return m.occupied; }).length;
+  return /*#__PURE__*/React.createElement("div", {className: "mesa-panel"},
+    /*#__PURE__*/React.createElement("div", {className: "mesa-panel-title", onClick: function() { setExpanded(!expanded); }},
+      /*#__PURE__*/React.createElement("span", null, "\uD83C\uDF7D\uFE0F Mesas (", occupiedCount, "/", TOTAL_MESAS, " ocupadas)"),
+      /*#__PURE__*/React.createElement("button", {className: "mesa-panel-toggle"}, expanded ? "\u25B2" : "\u25BC")
+    ),
+    expanded && /*#__PURE__*/React.createElement("div", {className: "mesa-grid"},
+      mesas.map(function(m) {
+        var chipClass = m.calling ? 'mesa-chip calling' : m.occupied ? 'mesa-chip occupied' : 'mesa-chip empty';
+        var dotClass = m.calling ? 'mesa-dot orange' : m.occupied ? 'mesa-dot green' : 'mesa-dot red';
+        return /*#__PURE__*/React.createElement("div", {key: m.num, className: chipClass},
+          /*#__PURE__*/React.createElement("div", {className: dotClass}),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", null, "Mesa ", m.num),
+            m.occupied && m.mozo
+              ? /*#__PURE__*/React.createElement("div", {className: "mesa-mozo"}, m.mozo)
+              : !m.occupied && /*#__PURE__*/React.createElement("div", {className: "mesa-mozo"}, "Vac\u00EDa"),
+            m.calling && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.65rem', fontWeight: 700, color: '#e65100'}}, "\uD83D\uDC4B Llamando")
+          )
+        );
+      })
+    )
+  );
 }
 
 function Dashboard({

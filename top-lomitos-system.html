@@ -1742,6 +1742,7 @@ function AppMain({
 
   // Filter pre-orders and calls for today
   var todayPreOrders = preOrders.filter(function(p) { return p.date === dateKey && p.status === 'waiting'; });
+  var myAcceptedPreOrders = preOrders.filter(function(p) { return p.date === dateKey && p.status === 'accepted' && p.acceptedBy === (user ? user.name : ''); });
   var todayCalls = mesaCalls.filter(function(c) { return c.date === dateKey && c.status === 'waiting'; });
 
   // Request browser notification permission
@@ -1858,7 +1859,13 @@ function AppMain({
     // Deep copy the pre-order so it survives Firebase re-renders
     var poCopy = JSON.parse(JSON.stringify(po));
     poCopy._key = po._key;
-    // Open pre-order for review with editable copies (do NOT change status yet)
+    // Mark as accepted in Firebase so OTHER mozos stop seeing it
+    fbUpdate('preOrders/' + preOrderKey, {status: 'accepted', acceptedBy: user.name, acceptedAt: Date.now()});
+    // Assign mozo to this mesa
+    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
+    // Remove from THIS mozo's notifications too
+    setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== preOrderKey; }); });
+    // Open pre-order for review with editable copies
     var items = ensureArray(poCopy.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.catName || it.cat || ''}; });
     setPoEditItems(items);
     setPoEditObs(poCopy.customerNote || '');
@@ -1867,7 +1874,7 @@ function AppMain({
     setPendingPreOrder(poCopy);
   }
 
-  // Close review without losing the pre-order (stays in notifications)
+  // Close review — pre-order stays accepted in Firebase (mozo can re-access from pedidos page)
   function closePreOrderReview() {
     setPendingPreOrder(null);
     setPoEditItems([]);
@@ -2386,6 +2393,28 @@ function AppMain({
   }, "\u22EF"), /*#__PURE__*/React.createElement("span", {
     className: "bnav-label"
   }, "M\xE1s")))),
+
+  // Accepted pre-orders not sent to kitchen yet (floating banner)
+  !pendingPreOrder && myAcceptedPreOrders.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'linear-gradient(135deg, #ff9800, #f57c00)', color: '#fff', padding: '10px 20px', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 12, maxWidth: 420, cursor: 'pointer', fontFamily: 'inherit'},
+    onClick: function() {
+      var po = myAcceptedPreOrders[0];
+      var poCopy = JSON.parse(JSON.stringify(po));
+      poCopy._key = po._key;
+      var items = ensureArray(poCopy.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.catName || it.cat || ''}; });
+      setPoEditItems(items);
+      setPoEditObs(poCopy.customerNote || '');
+      setPoAddingItem(false);
+      setPoAddCat(null);
+      setPendingPreOrder(poCopy);
+    }
+  },
+    /*#__PURE__*/React.createElement("span", {style: {fontSize: '1.3rem'}}, "\uD83D\uDCF1"),
+    /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.85rem'}}, myAcceptedPreOrders.length === 1 ? "Pedido QR Mesa " + myAcceptedPreOrders[0].mesa + " pendiente" : myAcceptedPreOrders.length + " pedidos QR pendientes"),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', opacity: .85}}, "Toc\u00E1 para revisar y enviar a cocina")
+    )
+  ),
 
   // Pre-order review modal (editable)
   pendingPreOrder && function() {

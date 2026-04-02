@@ -1745,6 +1745,19 @@ function AppMain({
   var myAcceptedPreOrders = preOrders.filter(function(p) { return p.date === dateKey && p.status === 'accepted' && p.acceptedBy === (user ? user.name : ''); });
   var todayCalls = mesaCalls.filter(function(c) { return c.date === dateKey && c.status === 'waiting'; });
 
+  // Auto-clean stale pre-orders (accepted/confirmed > 30 min ago)
+  useEffect(function() {
+    if (!user || user.role === 'tv' || user.role === 'prep') return;
+    var STALE_MS = 30 * 60 * 1000;
+    preOrders.forEach(function(p) {
+      if (p.date !== dateKey) return;
+      var age = Date.now() - (p.acceptedAt || p.confirmedAt || p.createdAt || 0);
+      if ((p.status === 'accepted' || p.status === 'confirmed') && age > STALE_MS) {
+        fbSet('preOrders/' + p._key, null);
+      }
+    });
+  }, [preOrders]);
+
   // Request browser notification permission
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {

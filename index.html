@@ -1678,6 +1678,10 @@ function AppMain({
   const prevCallsRef = useRef({});
   const [showNotifPanel, setShowNotifPanel] = useState(false);
   const [pendingPreOrder, setPendingPreOrder] = useState(null); // pre-order being reviewed by mozo
+  const [poEditItems, setPoEditItems] = useState([]);
+  const [poEditObs, setPoEditObs] = useState('');
+  const [poAddingItem, setPoAddingItem] = useState(false);
+  const [poAddCat, setPoAddCat] = useState(null);
 
   // Filter pre-orders and calls for today
   var todayPreOrders = preOrders.filter(function(p) { return p.date === dateKey && p.status === 'waiting'; });
@@ -1800,7 +1804,12 @@ function AppMain({
     fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
     // Remove notification
     setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== preOrderKey; }); });
-    // Open pre-order for review
+    // Open pre-order for review with editable copies
+    var items = ensureArray(po.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.cat || ''}; });
+    setPoEditItems(items);
+    setPoEditObs(po.customerNote || '');
+    setPoAddingItem(false);
+    setPoAddCat(null);
     setPendingPreOrder(po);
   }
 
@@ -2312,42 +2321,131 @@ function AppMain({
     className: "bnav-label"
   }, "M\xE1s")))),
 
-  // Pre-order review modal
-  pendingPreOrder && /*#__PURE__*/React.createElement("div", {className: "modal-overlay", onClick: function() { setPendingPreOrder(null); }},
-    /*#__PURE__*/React.createElement("div", {className: "modal", onClick: function(e) { e.stopPropagation(); }, style: {maxWidth: 460, maxHeight: '85vh', overflow: 'auto'}},
-      /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
-      /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCF1 Pedido QR \u2014 Mesa ", pendingPreOrder.mesa),
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', textAlign: 'center', marginBottom: 14}},
-        "Pedido realizado por el cliente. Verific\u00E1 y envi\u00E1 a cocina."
-      ),
-      pendingPreOrder.customerNote && /*#__PURE__*/React.createElement("div", {style: {background: '#fff8e1', padding: '8px 12px', borderRadius: 8, fontSize: '.85rem', marginBottom: 10, border: '1px dashed #ffb300'}},
-        "\uD83D\uDCDD ", pendingPreOrder.customerNote
-      ),
-      /*#__PURE__*/React.createElement("div", {style: {marginBottom: 12}},
-        ensureArray(pendingPreOrder.items).map(function(item, idx) {
-          return /*#__PURE__*/React.createElement("div", {key: idx, style: {display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--gray)', fontSize: '.9rem'}},
-            /*#__PURE__*/React.createElement("span", null, item.qty, "x ", item.name),
-            /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, (item.price * item.qty).toLocaleString('es-PY'), " Gs.")
-          );
-        })
-      ),
-      /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14, color: 'var(--primary)'}},
-        "Total: ", (pendingPreOrder.total || 0).toLocaleString('es-PY'), " Gs."
-      ),
-      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
-        /*#__PURE__*/React.createElement("button", {
-          className: "btn btn-outline",
-          style: {flex: 1},
-          onClick: function() { setPendingPreOrder(null); }
-        }, "Cancelar"),
-        /*#__PURE__*/React.createElement("button", {
-          className: "btn btn-primary",
-          style: {flex: 2},
-          onClick: function() { sendPreOrderToKitchen(pendingPreOrder); }
-        }, "\uD83D\uDD25 Enviar a Cocina")
+  // Pre-order review modal (editable)
+  pendingPreOrder && function() {
+    var poTotal = poEditItems.reduce(function(s, i) { return s + (i.price || 0) * (i.qty || 1); }, 0);
+    var menuCats = MENU_DATA.filter(function(c) { return c.id !== 'personalizado' && c.items && c.items.length > 0; });
+    function poChangeQty(idx, delta) {
+      setPoEditItems(function(prev) {
+        var copy = prev.map(function(it) { return Object.assign({}, it); });
+        copy[idx].qty = Math.max(1, (copy[idx].qty || 1) + delta);
+        return copy;
+      });
+    }
+    function poRemoveItem(idx) {
+      setPoEditItems(function(prev) { return prev.filter(function(_, i) { return i !== idx; }); });
+    }
+    function poAddMenuItem(item, catName) {
+      var existing = poEditItems.findIndex(function(it) { return it.name === item.name; });
+      if (existing >= 0) {
+        poChangeQty(existing, 1);
+      } else {
+        setPoEditItems(function(prev) { return prev.concat([{name: item.name, price: item.price, qty: 1, cat: catName}]); });
+      }
+    }
+    return /*#__PURE__*/React.createElement("div", {className: "modal-overlay", onClick: function() { setPendingPreOrder(null); }},
+      /*#__PURE__*/React.createElement("div", {className: "modal", onClick: function(e) { e.stopPropagation(); }, style: {maxWidth: 500, maxHeight: '90vh', overflow: 'auto'}},
+        /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+        /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCF1 Pedido QR \u2014 Mesa ", pendingPreOrder.mesa),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', textAlign: 'center', marginBottom: 14}},
+          "Revis\u00E1, modific\u00E1 y envi\u00E1 a cocina."
+        ),
+        // === ITEMS LIST (editable) ===
+        /*#__PURE__*/React.createElement("div", {style: {marginBottom: 10}},
+          poEditItems.length === 0 && /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', color: 'var(--gray3)', fontSize: '.85rem', padding: 12}}, "Sin productos. Agreg\u00E1 algo del men\u00FA."),
+          poEditItems.map(function(item, idx) {
+            return /*#__PURE__*/React.createElement("div", {key: idx, style: {display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--gray)', fontSize: '.88rem'}},
+              /*#__PURE__*/React.createElement("button", {
+                onClick: function() { poRemoveItem(idx); },
+                style: {background: '#ffeef0', border: 'none', color: '#e63946', borderRadius: 6, width: 26, height: 26, cursor: 'pointer', fontWeight: 800, fontSize: '.85rem', flexShrink: 0}
+              }, "\u2715"),
+              /*#__PURE__*/React.createElement("span", {style: {flex: 1, fontWeight: 500}}, item.name),
+              /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 4}},
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: function() { poChangeQty(idx, -1); },
+                  style: {width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--dark2)', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '1rem'}
+                }, "\u2212"),
+                /*#__PURE__*/React.createElement("span", {style: {minWidth: 22, textAlign: 'center', fontWeight: 700}}, item.qty || 1),
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: function() { poChangeQty(idx, 1); },
+                  style: {width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--dark2)', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '1rem'}
+                }, "+")
+              ),
+              /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, minWidth: 75, textAlign: 'right', fontSize: '.82rem'}}, formatGs((item.price || 0) * (item.qty || 1)))
+            );
+          })
+        ),
+        // === ADD ITEM BUTTON / SELECTOR ===
+        !poAddingItem
+          ? /*#__PURE__*/React.createElement("button", {
+              onClick: function() { setPoAddingItem(true); setPoAddCat(null); },
+              style: {width: '100%', padding: '10px', background: '#e8f5e9', border: '1.5px dashed #2d6a4f', borderRadius: 10, color: '#2d6a4f', fontWeight: 700, fontSize: '.9rem', cursor: 'pointer', marginBottom: 10, fontFamily: 'inherit'}
+            }, "+ Agregar Producto")
+          : /*#__PURE__*/React.createElement("div", {style: {background: '#f8f9fa', borderRadius: 10, padding: 10, marginBottom: 10, border: '1px solid var(--gray)'}},
+              /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}},
+                /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, fontSize: '.85rem'}}, "\uD83D\uDCCB Seleccion\u00E1 un producto"),
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: function() { setPoAddingItem(false); },
+                  style: {background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: 'var(--gray3)'}
+                }, "\u2715")
+              ),
+              // Category tabs
+              /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4, overflowX: 'auto', marginBottom: 8, paddingBottom: 4}},
+                menuCats.map(function(c) {
+                  return /*#__PURE__*/React.createElement("button", {
+                    key: c.id,
+                    onClick: function() { setPoAddCat(poAddCat === c.id ? null : c.id); },
+                    style: {background: poAddCat === c.id ? 'var(--primary)' : '#fff', color: poAddCat === c.id ? '#fff' : '#333', border: '1px solid var(--gray)', padding: '4px 10px', borderRadius: 16, fontSize: '.72rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit'}
+                  }, c.icon, " ", c.name);
+                })
+              ),
+              // Items list for selected category
+              poAddCat && /*#__PURE__*/React.createElement("div", {style: {maxHeight: 180, overflowY: 'auto'}},
+                (MENU_DATA.find(function(c) { return c.id === poAddCat; }) || {items: []}).items.map(function(item) {
+                  var alreadyIn = poEditItems.some(function(it) { return it.name === item.name; });
+                  return /*#__PURE__*/React.createElement("div", {
+                    key: item.id,
+                    onClick: function() { poAddMenuItem(item, poAddCat); },
+                    style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 8px', borderRadius: 8, cursor: 'pointer', fontSize: '.82rem', background: alreadyIn ? '#e8f5e9' : '#fff', marginBottom: 2, border: '1px solid ' + (alreadyIn ? '#a5d6a7' : 'transparent')}
+                  },
+                    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 500}}, item.name, alreadyIn && " \u2705"),
+                    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: 'var(--primary)', fontSize: '.8rem'}}, formatGs(item.price))
+                  );
+                })
+              )
+            ),
+        // === OBSERVATIONS ===
+        /*#__PURE__*/React.createElement("div", {style: {marginBottom: 12}},
+          /*#__PURE__*/React.createElement("label", {style: {fontSize: '.8rem', fontWeight: 600, color: 'var(--gray3)', display: 'block', marginBottom: 4}}, "\uD83D\uDCDD Notas / Observaciones"),
+          /*#__PURE__*/React.createElement("textarea", {
+            value: poEditObs,
+            onChange: function(e) { setPoEditObs(e.target.value); },
+            placeholder: "Ej: sin cebolla, bien cocido, alergia a...",
+            rows: 2,
+            style: {width: '100%', padding: '8px 10px', border: '1.5px solid var(--gray)', borderRadius: 8, fontSize: '.85rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box'}
+          })
+        ),
+        // === TOTAL ===
+        /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14, color: 'var(--primary)'}},
+          "Total: ", formatGs(poTotal)
+        ),
+        // === BUTTONS ===
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
+          /*#__PURE__*/React.createElement("button", {
+            className: "btn btn-outline",
+            style: {flex: 1},
+            onClick: function() { setPendingPreOrder(null); }
+          }, "Cancelar"),
+          /*#__PURE__*/React.createElement("button", {
+            className: "btn btn-primary",
+            style: {flex: 2, opacity: poEditItems.length === 0 ? 0.5 : 1},
+            disabled: poEditItems.length === 0,
+            onClick: function() { sendPreOrderToKitchen(pendingPreOrder, poEditItems, poEditObs); }
+          }, "\uD83D\uDD25 Enviar a Cocina")
+        )
       )
-    )
-  )
+    );
+  }()
 
   );
 }

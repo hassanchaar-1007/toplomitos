@@ -210,6 +210,29 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
 @keyframes tvPulse{0%,100%{box-shadow:0 0 0 0 rgba(45,106,79,.4)}50%{box-shadow:0 0 20px 4px rgba(45,106,79,.3)}}
 .tv-order-card.tv-ready{animation:tvPulse 2s infinite}
 @media(max-width:768px){.tv-columns{grid-template-columns:1fr}.tv-stats{flex-wrap:wrap}}
+/* ===== CLIENTE MENU VIEW ===== */
+.cli-bg{min-height:100vh;background:linear-gradient(180deg,#1d3557 0%,#457b9d 60%,#a8dadc 100%);font-family:'Inter',sans-serif}
+.cli-header{background:rgba(0,0,0,.25);padding:16px 20px;text-align:center;color:#fff;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.cli-logo{font-size:1.6rem;font-weight:800;color:#f4a261}
+.cli-mesa{font-size:.85rem;color:#a8dadc;margin-top:2px}
+.cli-body{padding:16px;max-width:600px;margin:0 auto}
+.cli-card{background:rgba(255,255,255,.95);border-radius:16px;padding:20px;margin-bottom:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);transition:.2s}
+.cli-card:active{transform:scale(.98)}
+.cli-cat{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.cli-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0}
+.cli-item:last-child{border-bottom:none}
+.cli-item-name{font-weight:600;font-size:.9rem;color:#333}
+.cli-item-price{font-weight:700;color:#e63946;font-size:.9rem;white-space:nowrap}
+.cli-item-controls{display:flex;align-items:center;gap:8px}
+.cli-qty-btn{width:32px;height:32px;border-radius:50%;border:2px solid #e63946;background:#fff;color:#e63946;font-size:1.1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s}
+.cli-qty-btn:active{background:#e63946;color:#fff}
+.cli-qty{font-weight:800;font-size:1rem;min-width:24px;text-align:center}
+.cli-cart-bar{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(135deg,#e63946,#c1121f);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:1rem;z-index:20;box-shadow:0 -4px 20px rgba(0,0,0,.3);cursor:pointer}
+.cli-send-btn{background:#fff;color:#e63946;border:none;padding:10px 24px;border-radius:10px;font-weight:800;font-size:.95rem;cursor:pointer;font-family:inherit}
+.cli-option-btn{width:100%;padding:20px;border:none;border-radius:14px;font-size:1.1rem;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:14px;margin-bottom:10px;transition:.15s;color:#fff;text-align:left}
+.cli-option-btn:active{transform:scale(.97);opacity:.9}
+.cli-success{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;backdrop-filter:blur(4px)}
+.cli-success-card{background:#fff;border-radius:20px;padding:36px;text-align:center;max-width:340px;margin:20px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 </style>
 </head>
 <body>
@@ -1289,6 +1312,234 @@ function SetupPage({
 }
 
 // ============== APP ==============
+// ============== CLIENTE MENU VIEW (QR) ==============
+function ClienteMenuView({ mesaNum }) {
+  var _s = useState('home'), mode = _s[0], setMode = _s[1]; // home, menu, order, success, calling, callSent
+  var _c = useState({}), cart = _c[0], setCart = _c[1]; // {itemId: {name, price, qty, catName}}
+  var _obs = useState(''), obs = _obs[0], setObs = _obs[1];
+  var _cat = useState(null), activeCat = _cat[0], setActiveCat = _cat[1];
+  var _fb = useState(false), fbOk = _fb[0], setFbOk = _fb[1];
+
+  useEffect(function() {
+    if (initFB(FIREBASE_CONFIG)) setFbOk(true);
+  }, []);
+
+  var formatGs = function(n) { return (n || 0).toLocaleString('es-PY') + ' Gs.'; };
+
+  // Filter out 'personalizado' category for customers
+  var menuForClient = MENU_DATA.filter(function(c) { return c.id !== 'personalizado' && c.items && c.items.length > 0; });
+
+  function addToCart(item, catName) {
+    setCart(function(prev) {
+      var existing = prev[item.id];
+      if (existing) return Object.assign({}, prev, (function() { var o = {}; o[item.id] = Object.assign({}, existing, {qty: existing.qty + 1}); return o; })());
+      var o = {}; o[item.id] = {name: item.name, price: item.price, qty: 1, catName: catName};
+      return Object.assign({}, prev, o);
+    });
+  }
+  function removeFromCart(itemId) {
+    setCart(function(prev) {
+      var existing = prev[itemId];
+      if (!existing) return prev;
+      if (existing.qty <= 1) {
+        var copy = Object.assign({}, prev);
+        delete copy[itemId];
+        return copy;
+      }
+      var o = {}; o[itemId] = Object.assign({}, existing, {qty: existing.qty - 1});
+      return Object.assign({}, prev, o);
+    });
+  }
+
+  var cartItems = Object.entries(cart).filter(function(e) { return e[1].qty > 0; });
+  var cartTotal = cartItems.reduce(function(s, e) { return s + e[1].price * e[1].qty; }, 0);
+  var cartCount = cartItems.reduce(function(s, e) { return s + e[1].qty; }, 0);
+
+  function submitPreOrder() {
+    if (cartCount === 0) return;
+    var items = cartItems.map(function(e) {
+      return {id: e[0], name: e[1].name, price: e[1].price, qty: e[1].qty, catName: e[1].catName};
+    });
+    var preOrder = {
+      mesa: Number(mesaNum),
+      items: items,
+      total: cartTotal,
+      customerNote: obs.trim(),
+      createdAt: Date.now(),
+      status: 'waiting', // waiting -> accepted -> sent_to_kitchen
+      date: todayStr()
+    };
+    fbPush('preOrders', preOrder);
+    setMode('success');
+    setCart({});
+    setObs('');
+  }
+
+  function llamarMozo() {
+    setMode('calling');
+    var call = {
+      mesa: Number(mesaNum),
+      createdAt: Date.now(),
+      status: 'waiting', // waiting -> attended
+      date: todayStr()
+    };
+    fbPush('mesaCalls', call);
+    setTimeout(function() { setMode('callSent'); }, 500);
+  }
+
+  // === HOME SCREEN ===
+  if (mode === 'home') {
+    return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
+      /*#__PURE__*/React.createElement("div", {className: "cli-header"},
+        /*#__PURE__*/React.createElement("div", {className: "cli-logo"}, "\uD83C\uDF2F Top Lomitos"),
+        /*#__PURE__*/React.createElement("div", {className: "cli-mesa"}, "Mesa ", mesaNum)
+      ),
+      /*#__PURE__*/React.createElement("div", {className: "cli-body", style: {paddingTop: 30}},
+        /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', color: '#fff', marginBottom: 30}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.8rem', fontWeight: 800, marginBottom: 4}}, "\u00A1Bienvenido!"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.95rem', opacity: .8}}, "\u00BFQu\u00E9 deseas hacer?")
+        ),
+        /*#__PURE__*/React.createElement("button", {className: "cli-option-btn", style: {background: 'linear-gradient(135deg, #2d6a4f, #40916c)'}, onClick: function() { setMode('menu'); }},
+          /*#__PURE__*/React.createElement("span", {style: {fontSize: '2rem'}}, "\uD83D\uDCCB"),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", null, "Ver Men\u00FA"),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', fontWeight: 400, opacity: .8}}, "Solo consultar precios y opciones")
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {className: "cli-option-btn", style: {background: 'linear-gradient(135deg, #e63946, #c1121f)'}, onClick: function() { setMode('order'); }},
+          /*#__PURE__*/React.createElement("span", {style: {fontSize: '2rem'}}, "\uD83D\uDED2"),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", null, "Hacer mi Pedido"),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', fontWeight: 400, opacity: .8}}, "Eleg\u00ED tus productos y envi\u00E1 tu pedido")
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {className: "cli-option-btn", style: {background: 'linear-gradient(135deg, #f4a261, #e76f51)'}, onClick: llamarMozo},
+          /*#__PURE__*/React.createElement("span", {style: {fontSize: '2rem'}}, "\uD83D\uDC4B"),
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", null, "Llamar Mozo"),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', fontWeight: 400, opacity: .8}}, "Un mozo se acercar\u00E1 a tu mesa")
+          )
+        )
+      )
+    );
+  }
+
+  // === CALL SENT ===
+  if (mode === 'calling' || mode === 'callSent') {
+    return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
+      /*#__PURE__*/React.createElement("div", {className: "cli-header"},
+        /*#__PURE__*/React.createElement("div", {className: "cli-logo"}, "\uD83C\uDF2F Top Lomitos"),
+        /*#__PURE__*/React.createElement("div", {className: "cli-mesa"}, "Mesa ", mesaNum)
+      ),
+      /*#__PURE__*/React.createElement("div", {className: "cli-body", style: {paddingTop: 60, textAlign: 'center'}},
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '4rem', marginBottom: 20}}, mode === 'calling' ? "\u23F3" : "\u2705"),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#fff', marginBottom: 8}},
+          mode === 'calling' ? "Llamando mozo..." : "\u00A1Mozo notificado!"
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '.95rem', color: '#a8dadc', marginBottom: 30}},
+          "Un mozo se acercar\u00E1 a tu mesa en breve"
+        ),
+        /*#__PURE__*/React.createElement("button", {className: "cli-option-btn", style: {background: 'rgba(255,255,255,.2)', justifyContent: 'center', maxWidth: 300, margin: '0 auto'}, onClick: function() { setMode('home'); }}, "\u2190 Volver al inicio")
+      )
+    );
+  }
+
+  // === SUCCESS ===
+  if (mode === 'success') {
+    return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
+      /*#__PURE__*/React.createElement("div", {className: "cli-success"},
+        /*#__PURE__*/React.createElement("div", {className: "cli-success-card"},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '3.5rem', marginBottom: 12}}, "\uD83C\uDF89"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.3rem', fontWeight: 800, color: '#1d3557', marginBottom: 8}}, "\u00A1Pedido enviado!"),
+          /*#__PURE__*/React.createElement("div", {style: {color: '#6c757d', fontSize: '.9rem', marginBottom: 20, lineHeight: 1.5}},
+            "Tu pedido fue recibido. Un mozo se acercar\u00E1 a tu mesa para confirmar."
+          ),
+          /*#__PURE__*/React.createElement("button", {
+            style: {background: '#e63946', color: '#fff', border: 'none', padding: '12px 30px', borderRadius: 10, fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit'},
+            onClick: function() { setMode('home'); }
+          }, "Volver al Inicio")
+        )
+      )
+    );
+  }
+
+  // === MENU / ORDER VIEW ===
+  var isOrderMode = mode === 'order';
+  return /*#__PURE__*/React.createElement("div", {className: "cli-bg", style: {paddingBottom: isOrderMode && cartCount > 0 ? 70 : 0}},
+    /*#__PURE__*/React.createElement("div", {className: "cli-header"},
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}},
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function() { setMode('home'); setActiveCat(null); },
+          style: {background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '.85rem'}
+        }, "\u2190 Volver"),
+        /*#__PURE__*/React.createElement("div", {className: "cli-logo"}, "\uD83C\uDF2F Top Lomitos"),
+        /*#__PURE__*/React.createElement("div", {style: {minWidth: 70, textAlign: 'right'}},
+          /*#__PURE__*/React.createElement("span", {className: "cli-mesa"}, "Mesa ", mesaNum)
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '1rem', fontWeight: 700, marginTop: 6}},
+        isOrderMode ? "\uD83D\uDED2 Arm\u00E1 tu Pedido" : "\uD83D\uDCCB Nuestro Men\u00FA"
+      )
+    ),
+    /*#__PURE__*/React.createElement("div", {className: "cli-body"},
+      // Category filters
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10, marginBottom: 6}},
+        /*#__PURE__*/React.createElement("button", {
+          onClick: function() { setActiveCat(null); },
+          style: {background: activeCat === null ? '#e63946' : 'rgba(255,255,255,.85)', color: activeCat === null ? '#fff' : '#333', border: 'none', padding: '6px 14px', borderRadius: 20, fontWeight: 600, fontSize: '.8rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit'}
+        }, "Todos"),
+        menuForClient.map(function(c) {
+          return /*#__PURE__*/React.createElement("button", {
+            key: c.id,
+            onClick: function() { setActiveCat(c.id); },
+            style: {background: activeCat === c.id ? '#e63946' : 'rgba(255,255,255,.85)', color: activeCat === c.id ? '#fff' : '#333', border: 'none', padding: '6px 14px', borderRadius: 20, fontWeight: 600, fontSize: '.8rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit'}
+          }, c.icon, " ", c.name);
+        })
+      ),
+      // Categories and items
+      menuForClient.filter(function(c) { return !activeCat || c.id === activeCat; }).map(function(cat) {
+        return /*#__PURE__*/React.createElement("div", {key: cat.id, className: "cli-cat"},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.05rem', fontWeight: 800, marginBottom: 4, color: '#1d3557'}}, cat.icon, " ", cat.name),
+          cat.desc && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: '#6c757d', marginBottom: 6}}, cat.desc),
+          cat.items.map(function(item) {
+            var inCart = cart[item.id];
+            return /*#__PURE__*/React.createElement("div", {key: item.id, className: "cli-item"},
+              /*#__PURE__*/React.createElement("div", null,
+                /*#__PURE__*/React.createElement("div", {className: "cli-item-name"}, item.name),
+                /*#__PURE__*/React.createElement("div", {className: "cli-item-price"}, formatGs(item.price))
+              ),
+              isOrderMode && /*#__PURE__*/React.createElement("div", {className: "cli-item-controls"},
+                inCart && inCart.qty > 0 && /*#__PURE__*/React.createElement("button", {className: "cli-qty-btn", onClick: function() { removeFromCart(item.id); }}, "\u2212"),
+                inCart && inCart.qty > 0 && /*#__PURE__*/React.createElement("span", {className: "cli-qty"}, inCart.qty),
+                /*#__PURE__*/React.createElement("button", {className: "cli-qty-btn", onClick: function() { addToCart(item, cat.name); }}, "+")
+              )
+            );
+          })
+        );
+      }),
+      // Observations field (order mode only)
+      isOrderMode && cartCount > 0 && /*#__PURE__*/React.createElement("div", {className: "cli-cat", style: {marginTop: 10}},
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '.9rem', fontWeight: 700, marginBottom: 6, color: '#1d3557'}}, "\uD83D\uDCDD Observaciones (opcional)"),
+        /*#__PURE__*/React.createElement("textarea", {
+          value: obs,
+          onChange: function(e) { setObs(e.target.value); },
+          placeholder: "Ej: sin sal, extra queso, sin cebolla...",
+          rows: 2,
+          style: {width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontFamily: 'inherit', fontSize: '.85rem', resize: 'none'}
+        })
+      )
+    ),
+    // Cart bar (order mode only)
+    isOrderMode && cartCount > 0 && /*#__PURE__*/React.createElement("div", {className: "cli-cart-bar", onClick: submitPreOrder},
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", null, "\uD83D\uDED2 ", cartCount, " item", cartCount > 1 ? "s" : ""),
+        /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', fontWeight: 400, opacity: .8}}, "Tocar para enviar")
+      ),
+      /*#__PURE__*/React.createElement("div", {className: "cli-send-btn"}, formatGs(cartTotal), " \u2192")
+    )
+  );
+}
+
 function App() {
   const [fbConnected, setFbConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1313,6 +1564,14 @@ function App() {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Detect QR client mode: ?mesa=17
+  var urlParams = new URLSearchParams(window.location.search);
+  var qrMesa = urlParams.get('mesa');
+  if (qrMesa) {
+    return /*#__PURE__*/React.createElement(ClienteMenuView, {mesaNum: qrMesa});
+  }
+
   if (loading) return /*#__PURE__*/React.createElement("div", {
     className: "login-bg"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1389,10 +1648,20 @@ function AppMain({
   const dateKey = todayStr();
   const orders = useFirebaseList('orders', []);
   const clockRecords = useFirebaseList('clockRecords', []);
+  const preOrders = useFirebaseList('preOrders', []);
+  const mesaCalls = useFirebaseList('mesaCalls', []);
+  const mesaAssignments = useFirebaseObj('mesaAssignments/' + dateKey, {});
   const [showConn, setShowConn] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const prevOrdersRef = useRef({});
+  const prevPreOrdersRef = useRef({});
+  const prevCallsRef = useRef({});
   const [showNotifPanel, setShowNotifPanel] = useState(false);
+  const [pendingPreOrder, setPendingPreOrder] = useState(null); // pre-order being reviewed by mozo
+
+  // Filter pre-orders and calls for today
+  var todayPreOrders = preOrders.filter(function(p) { return p.date === dateKey && p.status === 'waiting'; });
+  var todayCalls = mesaCalls.filter(function(c) { return c.date === dateKey && c.status === 'waiting'; });
 
   // Request browser notification permission
   useEffect(() => {
@@ -1457,6 +1726,85 @@ function AppMain({
     });
     prevOrdersRef.current = newPrev;
   }, [orders]);
+
+  // Notify mozos of new pre-orders from QR
+  useEffect(function() {
+    if (!user || (user.role !== 'mozo_interior' && user.role !== 'admin')) return;
+    var prev = prevPreOrdersRef.current;
+    todayPreOrders.forEach(function(p) {
+      if (!prev[p._key]) {
+        var msg = '\uD83D\uDCF1 MESA ' + p.mesa + ' realiz\u00F3 un pedido (QR) \u2014 ' + ensureArray(p.items).length + ' items, ' + (p.total || 0).toLocaleString('es-PY') + ' Gs.';
+        setNotifications(function(n) { return [{id: Date.now() + Math.random(), msg: msg, time: Date.now(), preOrderKey: p._key, type: 'preOrder'}, ...n.slice(0, 19)]; });
+        playNotifSound();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('\uD83C\uDF2F Top Lomitos', {body: msg, tag: 'preorder-' + p._key});
+        }
+      }
+    });
+    var newPrev = {};
+    todayPreOrders.forEach(function(p) { newPrev[p._key] = true; });
+    prevPreOrdersRef.current = newPrev;
+  }, [todayPreOrders]);
+
+  // Notify mozos of mesa calls
+  useEffect(function() {
+    if (!user) return;
+    var isMozoInt = user.role === 'mozo_interior' || user.role === 'admin';
+    if (!isMozoInt) return;
+    var prev = prevCallsRef.current;
+    todayCalls.forEach(function(c) {
+      if (!prev[c._key]) {
+        // Check if this mesa has an assigned mozo
+        var assignment = mesaAssignments[String(c.mesa)];
+        if (assignment && assignment.mozo && assignment.mozo !== user.name) return; // assigned to another mozo, skip
+        var msg = '\uD83D\uDC4B MESA ' + c.mesa + ' est\u00E1 LLAMANDO';
+        setNotifications(function(n) { return [{id: Date.now() + Math.random(), msg: msg, time: Date.now(), callKey: c._key, mesa: c.mesa, type: 'mesaCall'}, ...n.slice(0, 19)]; });
+        playNotifSound();
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('\uD83C\uDF2F Top Lomitos', {body: msg, tag: 'call-' + c._key});
+        }
+      }
+    });
+    var newPrev = {};
+    todayCalls.forEach(function(c) { newPrev[c._key] = true; });
+    prevCallsRef.current = newPrev;
+  }, [todayCalls]);
+
+  // Accept pre-order: assign mozo, open for editing, then send to kitchen
+  function acceptPreOrder(preOrderKey) {
+    var po = preOrders.find(function(p) { return p._key === preOrderKey; });
+    if (!po) return;
+    // Mark as accepted
+    fbUpdate('preOrders/' + preOrderKey, {status: 'accepted', acceptedBy: user.name, acceptedAt: Date.now()});
+    // Assign mozo to this mesa
+    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
+    // Open pre-order for review
+    setPendingPreOrder(po);
+  }
+
+  // Send accepted pre-order to kitchen as real order
+  async function sendPreOrderToKitchen(po, editedItems, editedObs) {
+    var items = editedItems || ensureArray(po.items);
+    var total = items.reduce(function(s, i) { return s + (i.price || 0) * (i.qty || 1); }, 0);
+    await addOrder({
+      type: 'mesa',
+      tableNum: String(po.mesa),
+      items: items,
+      total: total,
+      waiter: user.name,
+      observations: editedObs || po.customerNote || ''
+    });
+    // Delete the pre-order
+    fbSet('preOrders/' + po._key, null);
+    setPendingPreOrder(null);
+  }
+
+  // Attend mesa call
+  function attendMesaCall(callKey, mesa) {
+    fbUpdate('mesaCalls/' + callKey, {status: 'attended', attendedBy: user.name, attendedAt: Date.now()});
+    // Assign mozo to this mesa
+    fbUpdate('mesaAssignments/' + dateKey + '/' + mesa, {mozo: user.name, assignedAt: Date.now()});
+  }
 
   // Notify admin+prep when shopping list is finalized/purchasing/received
   const prevListaRef = useRef(null);
@@ -1807,17 +2155,26 @@ function AppMain({
       padding: '10px 14px',
       borderBottom: '1px solid var(--gray)',
       fontSize: '.82rem',
-      cursor: 'pointer'
+      cursor: n.type ? 'default' : 'pointer',
+      background: n.type === 'preOrder' ? '#fff8e1' : n.type === 'mesaCall' ? '#ffd6d9' : 'transparent'
     },
     onClick: () => {
-      setShowNotifPanel(false);
-      setPage('pedidos');
+      if (!n.type) { setShowNotifPanel(false); setPage('pedidos'); }
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontWeight: 600
     }
-  }, n.msg), /*#__PURE__*/React.createElement("div", {
+  }, n.msg),
+  n.type === 'preOrder' && n.preOrderKey && /*#__PURE__*/React.createElement("button", {
+    style: {marginTop: 6, background: '#2d6a4f', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, fontWeight: 700, fontSize: '.8rem', cursor: 'pointer', fontFamily: 'inherit'},
+    onClick: function(e) { e.stopPropagation(); acceptPreOrder(n.preOrderKey); setShowNotifPanel(false); }
+  }, "\u2705 Atender Pedido"),
+  n.type === 'mesaCall' && n.callKey && /*#__PURE__*/React.createElement("button", {
+    style: {marginTop: 6, background: '#e63946', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, fontWeight: 700, fontSize: '.8rem', cursor: 'pointer', fontFamily: 'inherit'},
+    onClick: function(e) { e.stopPropagation(); attendMesaCall(n.callKey, n.mesa); setShowNotifPanel(false); }
+  }, "\uD83D\uDC4B Ir a Mesa"),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: '.7rem',
       color: 'var(--gray3)',
@@ -1925,7 +2282,46 @@ function AppMain({
     className: "bnav-icon"
   }, "\u22EF"), /*#__PURE__*/React.createElement("span", {
     className: "bnav-label"
-  }, "M\xE1s")))));
+  }, "M\xE1s")))),
+
+  // Pre-order review modal
+  pendingPreOrder && /*#__PURE__*/React.createElement("div", {className: "modal-overlay", onClick: function() { setPendingPreOrder(null); }},
+    /*#__PURE__*/React.createElement("div", {className: "modal", onClick: function(e) { e.stopPropagation(); }, style: {maxWidth: 460, maxHeight: '85vh', overflow: 'auto'}},
+      /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+      /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCF1 Pedido QR \u2014 Mesa ", pendingPreOrder.mesa),
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', textAlign: 'center', marginBottom: 14}},
+        "Pedido realizado por el cliente. Verific\u00E1 y envi\u00E1 a cocina."
+      ),
+      pendingPreOrder.customerNote && /*#__PURE__*/React.createElement("div", {style: {background: '#fff8e1', padding: '8px 12px', borderRadius: 8, fontSize: '.85rem', marginBottom: 10, border: '1px dashed #ffb300'}},
+        "\uD83D\uDCDD ", pendingPreOrder.customerNote
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {marginBottom: 12}},
+        ensureArray(pendingPreOrder.items).map(function(item, idx) {
+          return /*#__PURE__*/React.createElement("div", {key: idx, style: {display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--gray)', fontSize: '.9rem'}},
+            /*#__PURE__*/React.createElement("span", null, item.qty, "x ", item.name),
+            /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, (item.price * item.qty).toLocaleString('es-PY'), " Gs.")
+          );
+        })
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14, color: 'var(--primary)'}},
+        "Total: ", (pendingPreOrder.total || 0).toLocaleString('es-PY'), " Gs."
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-outline",
+          style: {flex: 1},
+          onClick: function() { setPendingPreOrder(null); }
+        }, "Cancelar"),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-primary",
+          style: {flex: 2},
+          onClick: function() { sendPreOrderToKitchen(pendingPreOrder); }
+        }, "\uD83D\uDD25 Enviar a Cocina")
+      )
+    )
+  )
+
+  );
 }
 
 // ============== LOGIN ==============

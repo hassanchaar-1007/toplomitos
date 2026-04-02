@@ -2394,26 +2394,33 @@ function AppMain({
     className: "bnav-label"
   }, "M\xE1s")))),
 
-  // Accepted pre-orders not sent to kitchen yet (floating banner)
+  // Accepted pre-orders not sent to kitchen yet (stacked banners, one per mesa)
   !pendingPreOrder && myAcceptedPreOrders.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'linear-gradient(135deg, #ff9800, #f57c00)', color: '#fff', padding: '10px 20px', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 12, maxWidth: 420, cursor: 'pointer', fontFamily: 'inherit'},
-    onClick: function() {
-      var po = myAcceptedPreOrders[0];
-      var poCopy = JSON.parse(JSON.stringify(po));
-      poCopy._key = po._key;
-      var items = ensureArray(poCopy.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.catName || it.cat || ''}; });
-      setPoEditItems(items);
-      setPoEditObs(poCopy.customerNote || '');
-      setPoAddingItem(false);
-      setPoAddCat(null);
-      setPendingPreOrder(poCopy);
-    }
+    style: {position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 200, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', maxWidth: 420, width: '90%'}
   },
-    /*#__PURE__*/React.createElement("span", {style: {fontSize: '1.3rem'}}, "\uD83D\uDCF1"),
-    /*#__PURE__*/React.createElement("div", null,
-      /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.85rem'}}, myAcceptedPreOrders.length === 1 ? "Pedido QR Mesa " + myAcceptedPreOrders[0].mesa + " pendiente" : myAcceptedPreOrders.length + " pedidos QR pendientes"),
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', opacity: .85}}, "Toc\u00E1 para revisar y enviar a cocina")
-    )
+    myAcceptedPreOrders.map(function(po, idx) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: po._key,
+        style: {width: '100%', background: 'linear-gradient(135deg, #ff9800, #f57c00)', color: '#fff', padding: '10px 16px', borderRadius: 12, boxShadow: '0 4px 16px rgba(0,0,0,.25)', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontFamily: 'inherit', transition: '.2s'},
+        onClick: function() {
+          var poCopy = JSON.parse(JSON.stringify(po));
+          poCopy._key = po._key;
+          var items = ensureArray(poCopy.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.catName || it.cat || ''}; });
+          setPoEditItems(items);
+          setPoEditObs(poCopy.customerNote || '');
+          setPoAddingItem(false);
+          setPoAddCat(null);
+          setPendingPreOrder(poCopy);
+        }
+      },
+        /*#__PURE__*/React.createElement("span", {style: {fontSize: '1.2rem'}}, "\uD83D\uDCF1"),
+        /*#__PURE__*/React.createElement("div", {style: {flex: 1}},
+          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.85rem'}}, "Pedido Mesa ", po.mesa, " por QR pendiente"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', opacity: .85}}, ensureArray(po.items).length, " items \u2014 ", (po.total || 0).toLocaleString('es-PY'), " Gs.")
+        ),
+        /*#__PURE__*/React.createElement("span", {style: {fontSize: '1.1rem', opacity: .8}}, "\u276F")
+      );
+    })
   ),
 
   // Pre-order review modal (editable)

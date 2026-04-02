@@ -1313,8 +1313,8 @@ function SetupPage({
 
 // ============== APP ==============
 // ============== CLIENTE MENU VIEW (QR) ==============
-function ClienteMenuView({ mesaNum }) {
-  var _s = useState('home'), mode = _s[0], setMode = _s[1]; // home, menu, order, success, calling, callSent
+function ClienteMenuView({ mesaNum, menuOnly }) {
+  var _s = useState(menuOnly ? 'menu' : 'home'), mode = _s[0], setMode = _s[1]; // home, menu, order, success, calling, callSent
   var _c = useState({}), cart = _c[0], setCart = _c[1]; // {itemId: {name, price, qty, catName}}
   var _obs = useState(''), obs = _obs[0], setObs = _obs[1];
   var _cat = useState(null), activeCat = _cat[0], setActiveCat = _cat[1];
@@ -1429,7 +1429,7 @@ function ClienteMenuView({ mesaNum }) {
     return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
       /*#__PURE__*/React.createElement("div", {className: "cli-header"},
         /*#__PURE__*/React.createElement("div", {className: "cli-logo"}, "\uD83C\uDF2F Top Lomitos"),
-        /*#__PURE__*/React.createElement("div", {className: "cli-mesa"}, "Mesa ", mesaNum)
+        mesaNum && /*#__PURE__*/React.createElement("div", {className: "cli-mesa"}, "Mesa ", mesaNum)
       ),
       /*#__PURE__*/React.createElement("div", {className: "cli-body", style: {paddingTop: 60, textAlign: 'center'}},
         /*#__PURE__*/React.createElement("div", {style: {fontSize: '4rem', marginBottom: 20}}, mode === 'calling' ? "\u23F3" : "\u2705"),
@@ -1468,13 +1468,13 @@ function ClienteMenuView({ mesaNum }) {
   return /*#__PURE__*/React.createElement("div", {className: "cli-bg", style: {paddingBottom: isOrderMode && cartCount > 0 ? 70 : 0}},
     /*#__PURE__*/React.createElement("div", {className: "cli-header"},
       /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center'}},
-        /*#__PURE__*/React.createElement("button", {
+        !menuOnly && /*#__PURE__*/React.createElement("button", {
           onClick: function() { setMode('home'); setActiveCat(null); },
           style: {background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '.85rem'}
         }, "\u2190 Volver"),
         /*#__PURE__*/React.createElement("div", {className: "cli-logo"}, "\uD83C\uDF2F Top Lomitos"),
         /*#__PURE__*/React.createElement("div", {style: {minWidth: 70, textAlign: 'right'}},
-          /*#__PURE__*/React.createElement("span", {className: "cli-mesa"}, "Mesa ", mesaNum)
+          mesaNum && /*#__PURE__*/React.createElement("span", {className: "cli-mesa"}, "Mesa ", mesaNum)
         )
       ),
       /*#__PURE__*/React.createElement("div", {style: {fontSize: '1rem', fontWeight: 700, marginTop: 6}},
@@ -1568,8 +1568,12 @@ function App() {
   // Detect QR client mode: ?mesa=17
   var urlParams = new URLSearchParams(window.location.search);
   var qrMesa = urlParams.get('mesa');
+  var qrMenuOnly = urlParams.get('menu');
   if (qrMesa) {
     return /*#__PURE__*/React.createElement(ClienteMenuView, {mesaNum: qrMesa});
+  }
+  if (qrMenuOnly) {
+    return /*#__PURE__*/React.createElement(ClienteMenuView, {mesaNum: null, menuOnly: true});
   }
 
   if (loading) return /*#__PURE__*/React.createElement("div", {

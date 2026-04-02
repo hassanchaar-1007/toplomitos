@@ -2758,7 +2758,7 @@ function MesaStatusPanel({ activeOrders, mesaAssignments, todayCalls }) {
     var hasOrder = activeOrders.some(function(o) { return o.type === 'mesa' && String(o.tableNum) === num && o.status !== 'paid'; });
     var assignment = mesaAssignments[num];
     var isCalling = todayCalls && todayCalls.some(function(c) { return String(c.mesa) === num; });
-    mesas.push({ num: i, occupied: hasOrder || (assignment && assignment.mozo), mozo: assignment ? assignment.mozo : null, calling: isCalling });
+    mesas.push({ num: i, occupied: hasOrder, mozo: hasOrder && assignment ? assignment.mozo : null, calling: isCalling });
   }
   var occupiedCount = mesas.filter(function(m) { return m.occupied; }).length;
   return /*#__PURE__*/React.createElement("div", {className: "mesa-panel"},

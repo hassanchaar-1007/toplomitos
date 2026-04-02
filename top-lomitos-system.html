@@ -248,6 +248,7 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
 .mesa-dot.orange{background:#e65100}
 .mesa-mozo{font-size:.7rem;font-weight:400;color:#6c757d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px}
 @keyframes mesaPulse{0%,100%{box-shadow:0 0 0 0 rgba(230,81,0,.3)}50%{box-shadow:0 0 8px 2px rgba(230,81,0,.2)}}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 @media(max-width:768px){.mesa-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}}
 </style>
 </head>
@@ -1335,10 +1336,31 @@ function ClienteMenuView({ mesaNum, menuOnly }) {
   var _obs = useState(''), obs = _obs[0], setObs = _obs[1];
   var _cat = useState(null), activeCat = _cat[0], setActiveCat = _cat[1];
   var _fb = useState(false), fbOk = _fb[0], setFbOk = _fb[1];
+  var _poKey = useState(null), myPreOrderKey = _poKey[0], setMyPreOrderKey = _poKey[1];
+  var _confirmed = useState(null), confirmedInfo = _confirmed[0], setConfirmedInfo = _confirmed[1];
 
   useEffect(function() {
     if (initFB(FIREBASE_CONFIG)) setFbOk(true);
   }, []);
+
+  // Listen for mozo confirmation on submitted pre-order
+  useEffect(function() {
+    if (!myPreOrderKey || !db) return;
+    var ref = db.ref('preOrders/' + myPreOrderKey);
+    function onVal(snap) {
+      var val = snap.val();
+      if (!val) {
+        // Pre-order was deleted (old flow fallback)
+        setConfirmedInfo({mozo: 'Tu mozo'});
+        return;
+      }
+      if (val.status === 'confirmed' && val.confirmedBy) {
+        setConfirmedInfo({mozo: val.confirmedBy});
+      }
+    }
+    ref.on('value', onVal);
+    return function() { ref.off('value', onVal); };
+  }, [myPreOrderKey]);
 
   var formatGs = function(n) { return (n || 0).toLocaleString('es-PY') + ' Gs.'; };
 
@@ -1382,10 +1404,14 @@ function ClienteMenuView({ mesaNum, menuOnly }) {
       total: cartTotal,
       customerNote: obs.trim(),
       createdAt: Date.now(),
-      status: 'waiting', // waiting -> accepted -> sent_to_kitchen
+      status: 'waiting',
       date: todayStr()
     };
-    fbPush('preOrders', preOrder);
+    var pushRef = db ? db.ref('preOrders').push(preOrder) : null;
+    if (pushRef && pushRef.key) {
+      setMyPreOrderKey(pushRef.key);
+    }
+    setConfirmedInfo(null);
     setMode('success');
     setCart({});
     setObs('');
@@ -1462,18 +1488,49 @@ function ClienteMenuView({ mesaNum, menuOnly }) {
 
   // === SUCCESS ===
   if (mode === 'success') {
+    // Check if mozo confirmed the order
+    if (confirmedInfo) {
+      return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
+        /*#__PURE__*/React.createElement("div", {className: "cli-success"},
+          /*#__PURE__*/React.createElement("div", {className: "cli-success-card"},
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '3.5rem', marginBottom: 12}}, "\u2705"),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.3rem', fontWeight: 800, color: '#2d6a4f', marginBottom: 8}}, "\u00A1Pedido confirmado!"),
+            /*#__PURE__*/React.createElement("div", {style: {background: '#e8f5e9', borderRadius: 12, padding: '16px 20px', marginBottom: 16, border: '1.5px solid #a5d6a7'}},
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: '#6c757d', marginBottom: 4}}, "Tu mozo asignado:"),
+              /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.2rem', fontWeight: 800, color: '#1d3557'}}, "\uD83D\uDC64 ", confirmedInfo.mozo)
+            ),
+            /*#__PURE__*/React.createElement("div", {style: {color: '#6c757d', fontSize: '.85rem', marginBottom: 20, lineHeight: 1.5}},
+              "Tu pedido fue enviado a cocina. ", confirmedInfo.mozo, " se encargar\u00E1 de atenderte."
+            ),
+            /*#__PURE__*/React.createElement("button", {
+              style: {background: '#2d6a4f', color: '#fff', border: 'none', padding: '14px 36px', borderRadius: 10, fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit'},
+              onClick: function() {
+                // Clean up: delete confirmed pre-order
+                if (myPreOrderKey) { fbSet('preOrders/' + myPreOrderKey, null); }
+                setMyPreOrderKey(null);
+                setConfirmedInfo(null);
+                setMode('home');
+              }
+            }, "\u2705 OK, Entendido")
+          )
+        )
+      );
+    }
+    // Waiting for mozo to confirm
     return /*#__PURE__*/React.createElement("div", {className: "cli-bg"},
       /*#__PURE__*/React.createElement("div", {className: "cli-success"},
         /*#__PURE__*/React.createElement("div", {className: "cli-success-card"},
-          /*#__PURE__*/React.createElement("div", {style: {fontSize: '3.5rem', marginBottom: 12}}, "\uD83C\uDF89"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '3.5rem', marginBottom: 12}}, "\u23F3"),
           /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.3rem', fontWeight: 800, color: '#1d3557', marginBottom: 8}}, "\u00A1Pedido enviado!"),
-          /*#__PURE__*/React.createElement("div", {style: {color: '#6c757d', fontSize: '.9rem', marginBottom: 20, lineHeight: 1.5}},
-            "Tu pedido fue recibido. Un mozo se acercar\u00E1 a tu mesa para confirmar."
+          /*#__PURE__*/React.createElement("div", {style: {color: '#6c757d', fontSize: '.9rem', marginBottom: 10, lineHeight: 1.5}},
+            "Tu pedido fue recibido. Esperando que un mozo lo confirme..."
           ),
-          /*#__PURE__*/React.createElement("button", {
-            style: {background: '#e63946', color: '#fff', border: 'none', padding: '12px 30px', borderRadius: 10, fontWeight: 700, fontSize: '1rem', cursor: 'pointer', fontFamily: 'inherit'},
-            onClick: function() { setMode('home'); }
-          }, "Volver al Inicio")
+          /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'center', marginBottom: 16}},
+            /*#__PURE__*/React.createElement("div", {style: {width: 40, height: 40, border: '3px solid #e0e0e0', borderTop: '3px solid #e63946', borderRadius: '50%', animation: 'spin 1s linear infinite'}})
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: '#aaa'}},
+            "No cierres esta p\u00E1gina. Te avisaremos cuando tu mozo confirme."
+          )
         )
       )
     );
@@ -1798,19 +1855,25 @@ function AppMain({
   function acceptPreOrder(preOrderKey) {
     var po = preOrders.find(function(p) { return p._key === preOrderKey; });
     if (!po) return;
-    // Mark as accepted
-    fbUpdate('preOrders/' + preOrderKey, {status: 'accepted', acceptedBy: user.name, acceptedAt: Date.now()});
-    // Assign mozo to this mesa
-    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
-    // Remove notification
-    setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== preOrderKey; }); });
-    // Open pre-order for review with editable copies
-    var items = ensureArray(po.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.cat || ''}; });
+    // Deep copy the pre-order so it survives Firebase re-renders
+    var poCopy = JSON.parse(JSON.stringify(po));
+    poCopy._key = po._key;
+    // Open pre-order for review with editable copies (do NOT change status yet)
+    var items = ensureArray(poCopy.items).map(function(it) { return {name: it.name, price: it.price, qty: it.qty || 1, cat: it.catName || it.cat || ''}; });
     setPoEditItems(items);
-    setPoEditObs(po.customerNote || '');
+    setPoEditObs(poCopy.customerNote || '');
     setPoAddingItem(false);
     setPoAddCat(null);
-    setPendingPreOrder(po);
+    setPendingPreOrder(poCopy);
+  }
+
+  // Close review without losing the pre-order (stays in notifications)
+  function closePreOrderReview() {
+    setPendingPreOrder(null);
+    setPoEditItems([]);
+    setPoEditObs('');
+    setPoAddingItem(false);
+    setPoAddCat(null);
   }
 
   // Send accepted pre-order to kitchen as real order
@@ -1825,9 +1888,12 @@ function AppMain({
       waiter: user.name,
       observations: editedObs || po.customerNote || ''
     });
-    // Delete the pre-order
-    fbSet('preOrders/' + po._key, null);
+    // Mark as confirmed with mozo name (client will see this), assign mozo, remove notification
+    fbUpdate('preOrders/' + po._key, {status: 'confirmed', confirmedBy: user.name, confirmedAt: Date.now()});
+    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
+    setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== po._key; }); });
     setPendingPreOrder(null);
+    setPoEditItems([]);
   }
 
   // Attend mesa call
@@ -2343,35 +2409,35 @@ function AppMain({
         setPoEditItems(function(prev) { return prev.concat([{name: item.name, price: item.price, qty: 1, cat: catName}]); });
       }
     }
-    return /*#__PURE__*/React.createElement("div", {className: "modal-overlay", onClick: function() { setPendingPreOrder(null); }},
+    return /*#__PURE__*/React.createElement("div", {className: "modal-overlay"},
       /*#__PURE__*/React.createElement("div", {className: "modal", onClick: function(e) { e.stopPropagation(); }, style: {maxWidth: 500, maxHeight: '90vh', overflow: 'auto'}},
         /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
-        /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\uD83D\uDCF1 Pedido QR \u2014 Mesa ", pendingPreOrder.mesa),
+        /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 4}}, "\uD83D\uDCF1 Pedido QR \u2014 Mesa ", pendingPreOrder.mesa),
         /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', textAlign: 'center', marginBottom: 14}},
-          "Revis\u00E1, modific\u00E1 y envi\u00E1 a cocina."
+          "Revis\u00E1, modific\u00E1 y envi\u00E1 a cocina. Si cerr\u00E1s, el pedido sigue en notificaciones."
         ),
         // === ITEMS LIST (editable) ===
         /*#__PURE__*/React.createElement("div", {style: {marginBottom: 10}},
           poEditItems.length === 0 && /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', color: 'var(--gray3)', fontSize: '.85rem', padding: 12}}, "Sin productos. Agreg\u00E1 algo del men\u00FA."),
           poEditItems.map(function(item, idx) {
-            return /*#__PURE__*/React.createElement("div", {key: idx, style: {display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--gray)', fontSize: '.88rem'}},
+            return /*#__PURE__*/React.createElement("div", {key: idx + '_' + item.name, style: {display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--gray)', fontSize: '.88rem'}},
               /*#__PURE__*/React.createElement("button", {
                 onClick: function() { poRemoveItem(idx); },
-                style: {background: '#ffeef0', border: 'none', color: '#e63946', borderRadius: 6, width: 26, height: 26, cursor: 'pointer', fontWeight: 800, fontSize: '.85rem', flexShrink: 0}
+                style: {background: '#ffeef0', border: 'none', color: '#e63946', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', fontWeight: 800, fontSize: '.9rem', flexShrink: 0, fontFamily: 'inherit'}
               }, "\u2715"),
               /*#__PURE__*/React.createElement("span", {style: {flex: 1, fontWeight: 500}}, item.name),
-              /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 4}},
+              /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 6}},
                 /*#__PURE__*/React.createElement("button", {
                   onClick: function() { poChangeQty(idx, -1); },
-                  style: {width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--dark2)', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '1rem'}
+                  style: {width: 30, height: 30, borderRadius: '50%', border: '2px solid var(--primary)', background: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary)', fontFamily: 'inherit'}
                 }, "\u2212"),
-                /*#__PURE__*/React.createElement("span", {style: {minWidth: 22, textAlign: 'center', fontWeight: 700}}, item.qty || 1),
+                /*#__PURE__*/React.createElement("span", {style: {minWidth: 24, textAlign: 'center', fontWeight: 800, fontSize: '1rem'}}, item.qty || 1),
                 /*#__PURE__*/React.createElement("button", {
                   onClick: function() { poChangeQty(idx, 1); },
-                  style: {width: 28, height: 28, borderRadius: '50%', border: '1.5px solid var(--dark2)', background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '1rem'}
+                  style: {width: 30, height: 30, borderRadius: '50%', border: '2px solid var(--primary)', background: 'var(--primary)', cursor: 'pointer', fontWeight: 800, fontSize: '1.1rem', color: '#fff', fontFamily: 'inherit'}
                 }, "+")
               ),
-              /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, minWidth: 75, textAlign: 'right', fontSize: '.82rem'}}, formatGs((item.price || 0) * (item.qty || 1)))
+              /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, minWidth: 80, textAlign: 'right', fontSize: '.82rem'}}, formatGs((item.price || 0) * (item.qty || 1)))
             );
           })
         ),
@@ -2379,14 +2445,14 @@ function AppMain({
         !poAddingItem
           ? /*#__PURE__*/React.createElement("button", {
               onClick: function() { setPoAddingItem(true); setPoAddCat(null); },
-              style: {width: '100%', padding: '10px', background: '#e8f5e9', border: '1.5px dashed #2d6a4f', borderRadius: 10, color: '#2d6a4f', fontWeight: 700, fontSize: '.9rem', cursor: 'pointer', marginBottom: 10, fontFamily: 'inherit'}
-            }, "+ Agregar Producto")
+              style: {width: '100%', padding: '12px', background: '#e8f5e9', border: '2px dashed #2d6a4f', borderRadius: 10, color: '#2d6a4f', fontWeight: 700, fontSize: '.95rem', cursor: 'pointer', marginBottom: 10, fontFamily: 'inherit'}
+            }, "+ Agregar Producto del Men\u00FA")
           : /*#__PURE__*/React.createElement("div", {style: {background: '#f8f9fa', borderRadius: 10, padding: 10, marginBottom: 10, border: '1px solid var(--gray)'}},
               /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8}},
                 /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, fontSize: '.85rem'}}, "\uD83D\uDCCB Seleccion\u00E1 un producto"),
                 /*#__PURE__*/React.createElement("button", {
                   onClick: function() { setPoAddingItem(false); },
-                  style: {background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: 'var(--gray3)'}
+                  style: {background: 'none', border: 'none', fontSize: '1.1rem', cursor: 'pointer', color: 'var(--gray3)', fontFamily: 'inherit'}
                 }, "\u2715")
               ),
               // Category tabs
@@ -2395,21 +2461,21 @@ function AppMain({
                   return /*#__PURE__*/React.createElement("button", {
                     key: c.id,
                     onClick: function() { setPoAddCat(poAddCat === c.id ? null : c.id); },
-                    style: {background: poAddCat === c.id ? 'var(--primary)' : '#fff', color: poAddCat === c.id ? '#fff' : '#333', border: '1px solid var(--gray)', padding: '4px 10px', borderRadius: 16, fontSize: '.72rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit'}
+                    style: {background: poAddCat === c.id ? 'var(--primary)' : '#fff', color: poAddCat === c.id ? '#fff' : '#333', border: '1px solid var(--gray)', padding: '5px 12px', borderRadius: 16, fontSize: '.75rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit'}
                   }, c.icon, " ", c.name);
                 })
               ),
               // Items list for selected category
-              poAddCat && /*#__PURE__*/React.createElement("div", {style: {maxHeight: 180, overflowY: 'auto'}},
+              poAddCat && /*#__PURE__*/React.createElement("div", {style: {maxHeight: 200, overflowY: 'auto'}},
                 (MENU_DATA.find(function(c) { return c.id === poAddCat; }) || {items: []}).items.map(function(item) {
                   var alreadyIn = poEditItems.some(function(it) { return it.name === item.name; });
                   return /*#__PURE__*/React.createElement("div", {
                     key: item.id,
                     onClick: function() { poAddMenuItem(item, poAddCat); },
-                    style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 8px', borderRadius: 8, cursor: 'pointer', fontSize: '.82rem', background: alreadyIn ? '#e8f5e9' : '#fff', marginBottom: 2, border: '1px solid ' + (alreadyIn ? '#a5d6a7' : 'transparent')}
+                    style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderRadius: 8, cursor: 'pointer', fontSize: '.85rem', background: alreadyIn ? '#e8f5e9' : '#fff', marginBottom: 3, border: '1.5px solid ' + (alreadyIn ? '#a5d6a7' : '#eee'), transition: '.15s'}
                   },
                     /*#__PURE__*/React.createElement("span", {style: {fontWeight: 500}}, item.name, alreadyIn && " \u2705"),
-                    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: 'var(--primary)', fontSize: '.8rem'}}, formatGs(item.price))
+                    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: 'var(--primary)', fontSize: '.82rem'}}, formatGs(item.price))
                   );
                 })
               )
@@ -2426,7 +2492,7 @@ function AppMain({
           })
         ),
         // === TOTAL ===
-        /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right', fontWeight: 800, fontSize: '1.1rem', marginBottom: 14, color: 'var(--primary)'}},
+        /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right', fontWeight: 800, fontSize: '1.15rem', marginBottom: 14, color: 'var(--primary)'}},
           "Total: ", formatGs(poTotal)
         ),
         // === BUTTONS ===
@@ -2434,8 +2500,8 @@ function AppMain({
           /*#__PURE__*/React.createElement("button", {
             className: "btn btn-outline",
             style: {flex: 1},
-            onClick: function() { setPendingPreOrder(null); }
-          }, "Cancelar"),
+            onClick: function() { closePreOrderReview(); }
+          }, "\u2190 Volver"),
           /*#__PURE__*/React.createElement("button", {
             className: "btn btn-primary",
             style: {flex: 2, opacity: poEditItems.length === 0 ? 0.5 : 1},

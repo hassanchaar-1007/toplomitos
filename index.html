@@ -5423,11 +5423,11 @@ function HistorialPage({
     style: {
       marginBottom: 14
     }
-  }, [7, 14, 30].map(n => /*#__PURE__*/React.createElement("button", {
-    key: n,
-    className: `cat-btn ${days === n ? 'active' : ''}`,
-    onClick: () => setDays(n)
-  }, "\xDAltimos ", n, " d\xEDas"))), /*#__PURE__*/React.createElement("div", {
+  }, [{n:7,label:'7 días'},{n:14,label:'14 días'},{n:30,label:'30 días'},{n:90,label:'3 meses'},{n:365,label:'1 año'}].map(function(opt) { return /*#__PURE__*/React.createElement("button", {
+    key: opt.n,
+    className: 'cat-btn ' + (days === opt.n ? 'active' : ''),
+    onClick: function() { setDays(opt.n); }
+  }, opt.label); })), /*#__PURE__*/React.createElement("div", {
     className: "stat-grid",
     style: {
       marginBottom: 14
@@ -5632,7 +5632,315 @@ function HistorialPage({
         })
       )
     );
-  }(), /*#__PURE__*/React.createElement("div", {
+  }(),
+
+  // ========== HORARIOS PICO ==========
+  function() {
+    var filteredOrders = allOrders.filter(function(o) { return dateKeys.includes(o.date) && (o.status === 'paid' || o.status === 'archived'); });
+    if (filteredOrders.length === 0) return null;
+    var byHour = {};
+    for (var h = 0; h < 24; h++) byHour[h] = {count: 0, total: 0};
+    filteredOrders.forEach(function(o) {
+      var ts = o.paidAt || o.createdAt;
+      if (!ts) return;
+      var hour = new Date(ts).getHours();
+      byHour[hour].count++;
+      byHour[hour].total += (o.total || 0);
+    });
+    var activeHours = Object.entries(byHour).filter(function(e) { return e[1].count > 0; });
+    if (activeHours.length === 0) return null;
+    var maxH = Math.max.apply(null, activeHours.map(function(e) { return e[1].count; }));
+    var peakHour = activeHours.sort(function(a, b) { return b[1].count - a[1].count; })[0];
+    var peakLabel = (peakHour[0] < 10 ? '0' : '') + peakHour[0] + ':00 - ' + (peakHour[0] < 9 ? '0' : '') + (Number(peakHour[0]) + 1) + ':00';
+    // Operating hours only (typically 11-23)
+    var opHours = Object.entries(byHour).filter(function(e) { return Number(e[0]) >= 11 && Number(e[0]) <= 23; });
+
+    return /*#__PURE__*/React.createElement("div", {className: "card", style: {marginTop: 14}},
+      /*#__PURE__*/React.createElement("div", {className: "card-title", style: {marginBottom: 12}}, "\u23F0 Horarios Pico"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap'}},
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fff3e0', padding: '6px 12px', borderRadius: 8, fontSize: '.8rem', fontWeight: 700}},
+          "\uD83D\uDD25 Hora pico: ", peakLabel, " (", peakHour[1].count, " pedidos)"
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#e8f5e9', padding: '6px 12px', borderRadius: 8, fontSize: '.8rem', fontWeight: 700}},
+          "\uD83D\uDCB0 Mejor hora: ", formatGs(peakHour[1].total)
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'flex-end', gap: 2, height: 100, padding: '0 4px'}},
+        opHours.map(function(entry) {
+          var h = entry[0], data = entry[1];
+          var pct = maxH > 0 ? data.count / maxH * 100 : 0;
+          var isTop = data.count === maxH && data.count > 0;
+          return /*#__PURE__*/React.createElement("div", {key: h, style: {flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2}},
+            data.count > 0 ? /*#__PURE__*/React.createElement("span", {style: {fontSize: '.6rem', fontWeight: 700, color: isTop ? '#e65100' : 'var(--gray3)'}}, data.count) : null,
+            /*#__PURE__*/React.createElement("div", {style: {width: '100%', height: Math.max(2, pct) + '%', minHeight: 2, background: isTop ? 'linear-gradient(180deg, #ff6d00, #e65100)' : data.count > 0 ? 'linear-gradient(180deg, #42a5f5, #1565c0)' : '#eee', borderRadius: '4px 4px 0 0', transition: '.3s'}}),
+            /*#__PURE__*/React.createElement("span", {style: {fontSize: '.55rem', color: 'var(--gray3)', fontWeight: 500}}, h + 'h')
+          );
+        })
+      )
+    );
+  }(),
+
+  // ========== DIAS DE LA SEMANA ==========
+  function() {
+    var filteredOrders = allOrders.filter(function(o) { return dateKeys.includes(o.date) && (o.status === 'paid' || o.status === 'archived'); });
+    if (filteredOrders.length === 0) return null;
+    var dayNames = ['Domingo', 'Lunes', 'Martes', 'Mi\u00e9rcoles', 'Jueves', 'Viernes', 'S\u00e1bado'];
+    var dayShort = ['Dom', 'Lun', 'Mar', 'Mi\u00e9', 'Jue', 'Vie', 'S\u00e1b'];
+    var byDay = [0,0,0,0,0,0,0];
+    var byDayTotal = [0,0,0,0,0,0,0];
+    var byDayDays = [{},{},{},{},{},{},{}];
+    filteredOrders.forEach(function(o) {
+      var d = new Date(o.date + 'T12:00');
+      var dow = d.getDay();
+      byDay[dow]++;
+      byDayTotal[dow] += (o.total || 0);
+      byDayDays[dow][o.date] = true;
+    });
+    var maxDay = Math.max.apply(null, byDay);
+    if (maxDay === 0) return null;
+    var bestDayIdx = byDay.indexOf(maxDay);
+    // Calculate averages
+    var avgByDay = byDay.map(function(count, i) {
+      var numDays = Object.keys(byDayDays[i]).length;
+      return numDays > 0 ? Math.round(count / numDays) : 0;
+    });
+    var maxAvg = Math.max.apply(null, avgByDay);
+
+    return /*#__PURE__*/React.createElement("div", {className: "card", style: {marginTop: 14}},
+      /*#__PURE__*/React.createElement("div", {className: "card-title", style: {marginBottom: 12}}, "\uD83D\uDCC5 Pedidos por D\u00eda de la Semana"),
+      /*#__PURE__*/React.createElement("div", {style: {background: '#e3f2fd', padding: '6px 12px', borderRadius: 8, fontSize: '.8rem', fontWeight: 700, marginBottom: 12, display: 'inline-block'}},
+        "\uD83C\uDFC6 D\u00eda m\u00e1s fuerte: ", dayNames[bestDayIdx], " (", byDay[bestDayIdx], " pedidos, promedio ", avgByDay[bestDayIdx], "/d\u00eda)"
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'flex-end', gap: 6, height: 90}},
+        dayShort.map(function(name, i) {
+          var pct = maxAvg > 0 ? avgByDay[i] / maxAvg * 100 : 0;
+          var isTop = i === bestDayIdx;
+          return /*#__PURE__*/React.createElement("div", {key: i, style: {flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3}},
+            avgByDay[i] > 0 ? /*#__PURE__*/React.createElement("span", {style: {fontSize: '.65rem', fontWeight: 700, color: isTop ? '#1565c0' : 'var(--gray3)'}}, avgByDay[i], "/d") : null,
+            /*#__PURE__*/React.createElement("div", {style: {width: '100%', height: Math.max(2, pct) + '%', minHeight: 2, background: isTop ? 'linear-gradient(180deg, #42a5f5, #1565c0)' : avgByDay[i] > 0 ? 'linear-gradient(180deg, #90caf9, #64b5f6)' : '#eee', borderRadius: '4px 4px 0 0', transition: '.3s'}}),
+            /*#__PURE__*/React.createElement("span", {style: {fontSize: '.7rem', fontWeight: isTop ? 800 : 500, color: isTop ? '#1565c0' : 'var(--dark)'}}, name)
+          );
+        })
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {marginTop: 10, fontSize: '.72rem', color: 'var(--gray3)'}},
+        "Promedio de pedidos por d\u00eda de la semana en el per\u00edodo seleccionado"
+      )
+    );
+  }(),
+
+  // ========== INDICADORES DE AFLUENCIA ==========
+  function() {
+    var filteredOrders = allOrders.filter(function(o) { return dateKeys.includes(o.date) && (o.status === 'paid' || o.status === 'archived'); });
+    if (filteredOrders.length === 0) return null;
+    var daysWithSales = {};
+    var mesaOrders = 0;
+    var autoOrders = 0;
+    var deliveryOrders = 0;
+    var totalItems = 0;
+    filteredOrders.forEach(function(o) {
+      daysWithSales[o.date] = true;
+      if (o.type === 'mesa') mesaOrders++;
+      else if (o.type === 'auto' || o.type === 'vehiculo') autoOrders++;
+      else if (o.type === 'delivery') deliveryOrders++;
+      var items = o.items || [];
+      if (!Array.isArray(items)) items = Object.keys(items).map(function(k) { return items[k]; });
+      items.forEach(function(it) { totalItems += (it.qty || 1); });
+    });
+    var numDays = Object.keys(daysWithSales).length || 1;
+    var avgOrdersPerDay = Math.round(filteredOrders.length / numDays);
+    // Estimate people: mesa orders avg 2 ppl, auto avg 2, delivery avg 1
+    var estPeople = Math.round(mesaOrders * 2.5 + autoOrders * 2 + deliveryOrders * 1);
+    var estPeoplePerDay = Math.round(estPeople / numDays);
+    var avgItemsPerOrder = filteredOrders.length > 0 ? (totalItems / filteredOrders.length).toFixed(1) : 0;
+    // Operating hours estimate (typical 6-7 hours)
+    var opHours = 7;
+    var ordersPerHour = (filteredOrders.length / numDays / opHours).toFixed(1);
+
+    // Trend: compare first half vs second half of period
+    var halfIdx = Math.floor(dateKeys.length / 2);
+    var firstHalf = dateKeys.slice(0, halfIdx);
+    var secondHalf = dateKeys.slice(halfIdx);
+    var firstCount = filteredOrders.filter(function(o) { return firstHalf.includes(o.date); }).length;
+    var secondCount = filteredOrders.filter(function(o) { return secondHalf.includes(o.date); }).length;
+    var firstDays = firstHalf.length || 1;
+    var secondDays = secondHalf.length || 1;
+    var trendPct = firstCount > 0 ? Math.round(((secondCount/secondDays) - (firstCount/firstDays)) / (firstCount/firstDays) * 100) : 0;
+
+    return /*#__PURE__*/React.createElement("div", {className: "card", style: {marginTop: 14}},
+      /*#__PURE__*/React.createElement("div", {className: "card-title", style: {marginBottom: 12}}, "\uD83D\uDC65 Indicadores de Afluencia"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10}},
+        /*#__PURE__*/React.createElement("div", {style: {background: '#f3e5f5', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#7b1fa2'}}, avgOrdersPerDay),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: '#7b1fa2', fontWeight: 600}}, "Pedidos/d\u00eda")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#e8f5e9', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#2e7d32'}}, estPeoplePerDay),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: '#2e7d32', fontWeight: 600}}, "Personas est./d\u00eda")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fff3e0', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#e65100'}}, ordersPerHour),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: '#e65100', fontWeight: 600}}, "Pedidos/hora")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#e3f2fd', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#1565c0'}}, avgItemsPerOrder),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: '#1565c0', fontWeight: 600}}, "Items/pedido")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: trendPct >= 0 ? '#e8f5e9' : '#ffebee', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: trendPct >= 0 ? '#2e7d32' : '#c62828'}}, (trendPct >= 0 ? '+' : '') + trendPct + '%'),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: trendPct >= 0 ? '#2e7d32' : '#c62828', fontWeight: 600}}, "Tendencia")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fce4ec', padding: 12, borderRadius: 10, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.4rem', fontWeight: 800, color: '#c62828'}}, estPeople),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.72rem', color: '#c62828', fontWeight: 600}}, "Personas est. total")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {marginTop: 10, fontSize: '.7rem', color: 'var(--gray3)', fontStyle: 'italic'}},
+        "* Personas estimadas: mesa ~2.5 pers., auto ~2 pers., delivery ~1 pers. D\u00edas con ventas: ", numDays
+      )
+    );
+  }(),
+
+  // ========== PERFIL DE BEBIDAS / TIPO DE CLIENTE ==========
+  function() {
+    var filteredOrders = allOrders.filter(function(o) { return dateKeys.includes(o.date) && (o.status === 'paid' || o.status === 'archived'); });
+    if (filteredOrders.length === 0) return null;
+
+    var categories = {
+      cerveza: {label: 'Cerveza', icon: '\uD83C\uDF7A', keywords: ['cerveza', 'brahma', 'pilsen', 'patricia', 'stella', 'corona', 'heineken', 'miller', 'budweiser'], count: 0, revenue: 0, color: '#f9a825'},
+      gaseosa: {label: 'Gaseosa Regular', icon: '\uD83E\uDD64', keywords: ['coca cola', 'pepsi', 'fanta', 'sprite', 'guarana', 'guaran\u00e1', 'gaseosa', 'seven up', '7up', 'coca-cola'], count: 0, revenue: 0, color: '#e53935'},
+      light: {label: 'Light/Zero/Diet', icon: '\uD83E\uDDCA', keywords: ['light', 'zero', 'diet', 'sin az\u00facar', 'sin azucar', 'stevia'], count: 0, revenue: 0, color: '#00acc1'},
+      agua: {label: 'Agua/Agua con gas', icon: '\uD83D\uDCA7', keywords: ['agua', 'mineral', 'con gas', 'sin gas', 'soda'], count: 0, revenue: 0, color: '#1e88e5'},
+      jugoNatural: {label: 'Jugos Naturales', icon: '\uD83E\uDDC3', keywords: ['jugo natural', 'limonada', 'jugo de'], count: 0, revenue: 0, color: '#43a047'},
+      otherBeverage: {label: 'Otras Bebidas', icon: '\uD83C\uDF79', keywords: [], count: 0, revenue: 0, color: '#8e24aa'}
+    };
+
+    var isBeverage = function(name) {
+      var lower = name.toLowerCase();
+      return lower.includes('coca') || lower.includes('pepsi') || lower.includes('cerveza') || lower.includes('brahma') || lower.includes('agua') || lower.includes('mineral') || lower.includes('jugo') || lower.includes('gaseosa') || lower.includes('fanta') || lower.includes('sprite') || lower.includes('light') || lower.includes('zero') || lower.includes('soda') || lower.includes('guaran') || (lower.includes('ml') && !lower.includes('lomit'));
+    };
+
+    var totalBevItems = 0;
+    var totalFoodItems = 0;
+
+    filteredOrders.forEach(function(o) {
+      var items = o.items || [];
+      if (!Array.isArray(items)) items = Object.keys(items).map(function(k) { return items[k]; });
+      items.forEach(function(it) {
+        var name = (it.name || '').toLowerCase();
+        var qty = it.qty || 1;
+        var rev = (it.price || 0) * qty;
+
+        if (!isBeverage(it.name || '')) { totalFoodItems += qty; return; }
+        totalBevItems += qty;
+
+        var matched = false;
+        // Check light/zero first (before gaseosa)
+        if (name.includes('light') || name.includes('zero') || name.includes('diet') || name.includes('sin az')) {
+          categories.light.count += qty; categories.light.revenue += rev; matched = true;
+        } else if (name.includes('cerveza') || name.includes('brahma') || name.includes('pilsen')) {
+          categories.cerveza.count += qty; categories.cerveza.revenue += rev; matched = true;
+        } else if (name.includes('coca') || name.includes('pepsi') || name.includes('fanta') || name.includes('sprite') || name.includes('gaseosa') || name.includes('guaran')) {
+          categories.gaseosa.count += qty; categories.gaseosa.revenue += rev; matched = true;
+        } else if (name.includes('agua') || name.includes('mineral') || name.includes('soda') || name.includes('con gas')) {
+          categories.agua.count += qty; categories.agua.revenue += rev; matched = true;
+        } else if (name.includes('jugo') || name.includes('limonada')) {
+          categories.jugoNatural.count += qty; categories.jugoNatural.revenue += rev; matched = true;
+        }
+        if (!matched) {
+          categories.otherBeverage.count += qty; categories.otherBeverage.revenue += rev;
+        }
+      });
+    });
+
+    var totalBev = Object.values(categories).reduce(function(s, c) { return s + c.count; }, 0);
+    if (totalBev === 0) return null;
+    var maxBev = Math.max.apply(null, Object.values(categories).map(function(c) { return c.count; }));
+
+    // Calculate "fit" vs "regular" profile
+    var fitItems = categories.light.count + categories.agua.count + categories.jugoNatural.count;
+    var regularItems = categories.cerveza.count + categories.gaseosa.count;
+    var fitPct = totalBev > 0 ? Math.round(fitItems / totalBev * 100) : 0;
+    var regularPct = totalBev > 0 ? Math.round(regularItems / totalBev * 100) : 0;
+
+    var activeCategories = Object.values(categories).filter(function(c) { return c.count > 0; }).sort(function(a, b) { return b.count - a.count; });
+
+    // Big totals for brands
+    var totalCervezas = categories.cerveza.count;
+    var totalGaseosas = categories.gaseosa.count + categories.light.count; // All soda including light
+    var cervezaRevenue = categories.cerveza.revenue;
+    var gaseosaRevenue = categories.gaseosa.revenue + categories.light.revenue;
+
+    return /*#__PURE__*/React.createElement("div", {className: "card", style: {marginTop: 14}},
+      /*#__PURE__*/React.createElement("div", {className: "card-title", style: {marginBottom: 12}}, "\uD83C\uDF7A Perfil de Bebidas y Tipo de Cliente"),
+
+      // === BIG SUMMARY: CERVEZAS vs GASEOSAS ===
+      /*#__PURE__*/React.createElement("div", {style: {display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16}},
+        /*#__PURE__*/React.createElement("div", {style: {background: 'linear-gradient(135deg, #f9a825, #f57f17)', padding: 16, borderRadius: 14, textAlign: 'center', color: '#fff', boxShadow: '0 3px 12px rgba(249,168,37,.3)'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem'}}, "\uD83C\uDF7A"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem', fontWeight: 900, lineHeight: 1}}, totalCervezas),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', fontWeight: 700, marginTop: 2}}, "Cervezas vendidas"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', fontWeight: 600, marginTop: 4, opacity: .9}}, formatGs(cervezaRevenue))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: 'linear-gradient(135deg, #e53935, #c62828)', padding: 16, borderRadius: 14, textAlign: 'center', color: '#fff', boxShadow: '0 3px 12px rgba(229,57,53,.3)'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem'}}, "\uD83E\uDD64"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem', fontWeight: 900, lineHeight: 1}}, totalGaseosas),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem', fontWeight: 700, marginTop: 2}}, "Gaseosas vendidas"),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', fontWeight: 600, marginTop: 4, opacity: .9}}, formatGs(gaseosaRevenue)),
+          categories.light.count > 0 ? /*#__PURE__*/React.createElement("div", {style: {fontSize: '.68rem', marginTop: 3, opacity: .8}}, "incl. ", categories.light.count, " light/zero") : null
+        )
+      ),
+
+      // Fit vs Regular bar
+      /*#__PURE__*/React.createElement("div", {style: {marginBottom: 14}},
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.78rem', fontWeight: 700, marginBottom: 4}},
+          /*#__PURE__*/React.createElement("span", {style: {color: '#43a047'}}, "\uD83E\uDD66 Fit/Saludable: ", fitPct, "%"),
+          /*#__PURE__*/React.createElement("span", {style: {color: '#e53935'}}, "\uD83C\uDF7B Regular/Indulgente: ", regularPct, "%")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', background: '#eee'}},
+          fitPct > 0 ? /*#__PURE__*/React.createElement("div", {style: {width: fitPct + '%', background: 'linear-gradient(90deg, #66bb6a, #43a047)', transition: '.3s'}}) : null,
+          regularPct > 0 ? /*#__PURE__*/React.createElement("div", {style: {width: regularPct + '%', background: 'linear-gradient(90deg, #ef5350, #e53935)', transition: '.3s'}}) : null,
+          (100 - fitPct - regularPct) > 0 ? /*#__PURE__*/React.createElement("div", {style: {width: (100 - fitPct - regularPct) + '%', background: '#bdbdbd'}}) : null
+        )
+      ),
+
+      // Beverage bars
+      activeCategories.map(function(cat) {
+        var pct = maxBev > 0 ? cat.count / maxBev * 100 : 0;
+        var sharePct = totalBev > 0 ? Math.round(cat.count / totalBev * 100) : 0;
+        return /*#__PURE__*/React.createElement("div", {key: cat.label, style: {marginBottom: 10}},
+          /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.8rem', marginBottom: 3}},
+            /*#__PURE__*/React.createElement("span", {style: {fontWeight: 600}}, cat.icon, " ", cat.label),
+            /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, cat.count, " uds (", sharePct, "%) \u2014 ", formatGs(cat.revenue))
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {background: '#eee', borderRadius: 6, height: 10, overflow: 'hidden'}},
+            /*#__PURE__*/React.createElement("div", {style: {width: Math.max(3, pct) + '%', height: '100%', background: cat.color, borderRadius: 6, transition: '.3s'}})
+          )
+        );
+      }),
+
+      // Summary metrics
+      /*#__PURE__*/React.createElement("div", {style: {display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 14}},
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fff8e1', padding: 10, borderRadius: 8, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.1rem', fontWeight: 800}}, totalBev),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.68rem', fontWeight: 600, color: '#f57f17'}}, "Bebidas vendidas")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fce4ec', padding: 10, borderRadius: 8, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.1rem', fontWeight: 800}}, totalFoodItems),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.68rem', fontWeight: 600, color: '#c62828'}}, "Comidas vendidas")
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#e8eaf6', padding: 10, borderRadius: 8, textAlign: 'center'}},
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '1.1rem', fontWeight: 800}}, totalBev > 0 && totalFoodItems > 0 ? (totalBev / totalFoodItems).toFixed(1) : '0'),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.68rem', fontWeight: 600, color: '#283593'}}, "Ratio bebida/comida")
+        )
+      ),
+
+      /*#__PURE__*/React.createElement("div", {style: {marginTop: 10, fontSize: '.7rem', color: 'var(--gray3)', fontStyle: 'italic'}},
+        "* Perfil Fit = agua + light/zero + jugos naturales. Regular = cerveza + gaseosa cl\u00e1sica. \u00datil para presentaciones a marcas."
+      )
+    );
+  }(),
+
+  /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       marginTop: 14,

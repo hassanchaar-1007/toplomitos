@@ -1189,6 +1189,18 @@ function silentPrint(html) {
   }, 500);
 }
 
+function archiveTicket(type, orderNum, html, orderKey) {
+  var dk = todayStr();
+  var key = type + '_' + (orderNum || 'unknown') + '_' + Date.now();
+  fbSet('ticketArchive/' + dk + '/' + key, {
+    type: type,
+    orderNum: orderNum || '----',
+    html: html,
+    createdAt: Date.now(),
+    orderKey: orderKey || ''
+  });
+}
+
 function printBothTickets(order) {
   var html = '<html><head><style>' + TICKET_STYLES +
     '.divider{text-align:center;font-size:10px;color:#999;margin:4mm 0;border-top:3px solid #000;padding-top:2mm}' +
@@ -1198,6 +1210,7 @@ function printBothTickets(order) {
     generateCashierTicketHtml(order) +
     '</body></html>';
   silentPrint(html);
+  archiveTicket('ambos', order.orderNum, html, order._key || order.id);
 }
 
 // ============== SEED DATABASE ==============
@@ -1728,6 +1741,11 @@ function App() {
       db.ref('.info/connected').on('value', snap => {
         setConnStatus(snap.val() ? 'online' : 'offline');
       });
+      // Load printing config
+      db.ref('config/printing').on('value', function(snap) {
+        var val = snap.val();
+        window._printingEnabled = val && val.enabled === false ? false : true;
+      });
     } else {
       setLoading(false);
     }
@@ -2204,6 +2222,8 @@ function AppMain({
       updates['cajaShifts/' + dk] = null;
       // Clear today's history
       updates['history/' + dk] = null;
+      // Clear ticket archive for today
+      updates['ticketArchive/' + dk] = null;
       await db.ref().update(updates);
     });
   }
@@ -3041,7 +3061,36 @@ function Dashboard({
       /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200, background: '#fff', border: '2px solid var(--danger)', borderRadius: 10, padding: 14}},
         /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 6, color: 'var(--danger)'}}, "\uD83D\uDDD1\uFE0F Reset General"),
         /*#__PURE__*/React.createElement("p", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 10}}, "Borra TODO: pedidos, historial, listas de compras y solicitudes. No se puede deshacer."),
-        /*#__PURE__*/React.createElement("button", {className: "btn btn-danger", style: {width: '100%'}, onClick: onResetGeneral}, "\uD83D\uDDD1\uFE0F Reset General")))));
+        /*#__PURE__*/React.createElement("button", {className: "btn btn-danger", style: {width: '100%'}, onClick: onResetGeneral}, "\uD83D\uDDD1\uFE0F Reset General")),
+      /*#__PURE__*/React.createElement(PrintingConfig, {}))));
+}
+
+function PrintingConfig() {
+  var printConfig = useFirebaseObj('config/printing', {enabled: true});
+  var isEnabled = printConfig && printConfig.enabled !== false ? true : false;
+  function togglePrinting() {
+    fbSet('config/printing', {enabled: !isEnabled});
+  }
+  return /*#__PURE__*/React.createElement("div", {style: {flex: 1, minWidth: 200, background: '#fff', border: '1px solid var(--warning)', borderRadius: 10, padding: 14}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 6}}, "\uD83D\uDDD1\uFE0F Configuraci\xF3n de Impresi\xF3n"),
+    /*#__PURE__*/React.createElement("div", {style: {marginBottom: 10}},
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6}},
+        /*#__PURE__*/React.createElement("input", {
+          type: "checkbox",
+          checked: isEnabled,
+          onChange: togglePrinting,
+          id: "printing-toggle",
+          style: {cursor: 'pointer', width: 20, height: 20}
+        }),
+        /*#__PURE__*/React.createElement("label", {htmlFor: "printing-toggle", style: {cursor: 'pointer', fontWeight: 600, fontSize: '.9rem'}}, isEnabled ? "Impresion ACTIVA" : "Impresion DESACTIVADA")
+      ),
+      /*#__PURE__*/React.createElement("p", {style: {fontSize: '.75rem', color: 'var(--gray3)', lineHeight: '1.4'}},
+        "Para impresi\xF3n SILENCIOSA (sin di\xE1logo), lanza Chrome con flag: ",
+        /*#__PURE__*/React.createElement("code", {style: {background: '#f5f5f5', padding: '2px 6px', borderRadius: 4, fontFamily: 'monospace', fontSize: '.7rem'}}, "--kiosk-printing"),
+        " en tu comando de inicio."
+      )
+    )
+  );
 }
 
 // ============== PEDIDOS ==============
@@ -3734,7 +3783,9 @@ function CocinaPage({
     className: "btn btn-warning btn-block",
     onClick: () => {
       onUpdateOrder(o.id, {status: 'preparing', preparingAt: Date.now()});
-      silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateKitchenTicketHtml(o) + '</body></html>');
+      var kitchenHtml = '<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateKitchenTicketHtml(o) + '</body></html>';
+      silentPrint(kitchenHtml);
+      archiveTicket('cocina', o.orderNum, kitchenHtml, o._key || o.id);
     }
   }, "\uD83D\uDD25 Preparar"))), preparing.map(o => /*#__PURE__*/React.createElement("div", {
     key: o._key || o.id,
@@ -3839,7 +3890,12 @@ function CajaPage({
   const [injectionNote, setInjectionNote] = useState('');
   const [showInjection, setShowInjection] = useState(false);
   const [floatAmount, setFloatAmount] = useState('');
+  const [showTicketArchive, setShowTicketArchive] = useState(false);
   const isAdmin = userRole === 'admin';
+
+  // === TICKET ARCHIVE ===
+  var ticketArchiveData = useFirebaseObj('ticketArchive/' + todayStr(), null);
+  var ticketList = ticketArchiveData ? Object.keys(ticketArchiveData).map(function(k) { return Object.assign({_key: k}, ticketArchiveData[k]); }).sort(function(a,b) { return (b.createdAt||0) - (a.createdAt||0); }) : [];
 
   // === DELIVERY DISPATCH STATE ===
   const [dispatchOrder, setDispatchOrder] = useState(null);
@@ -4048,6 +4104,7 @@ function CajaPage({
       '<div class="ln"></div><div class="c">Firma cajera: _______________</div>' +
       '</div></body></html>';
     silentPrint(html);
+    archiveTicket('delivery', myOpenShift ? (myOpenShift.cashier || 'unknown') : 'unknown', html, myOpenShift ? myOpenShift._key : '');
   }
 
   function printReporteFinal() {
@@ -4094,6 +4151,7 @@ function CajaPage({
       '<div class="ln"></div><div class="c">Firma administrador: _______________</div>' +
       '</div></body></html>';
     silentPrint(html);
+    archiveTicket('reporte', 'REPORTE_FINAL', html, 'reporte_' + Date.now());
   }
 
   function cobrarConMetodo(order, metodo, mixData) {
@@ -4131,7 +4189,9 @@ function CajaPage({
     setDiscountAmount('');
     setReceiptOrder(order);
     var ticketOrder = Object.assign({}, order, payData, {total: finalTotal});
-    silentPrint('<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(ticketOrder) + '</body></html>');
+    var cashierHtml = '<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(ticketOrder) + '</body></html>';
+    silentPrint(cashierHtml);
+    archiveTicket('caja', order.orderNum, cashierHtml, order._key || order.id);
   }
   // Group unpaid orders by mesa/vehicle for "Por Mesa" view
   const mesaGroups = useMemo(() => {
@@ -4251,6 +4311,11 @@ function CajaPage({
         style: {fontSize: '.75rem'},
         onClick: function() { setShowInjection(true); }
       }, "\uD83D\uDCB5+ Inyectar Sencillo"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-outline btn-sm",
+        style: {fontSize: '.75rem'},
+        onClick: function() { setShowTicketArchive(true); }
+      }, "\uD83D\uDDD3\uFE0F Tickets del Día"),
       /*#__PURE__*/React.createElement("button", {
         className: "btn btn-sm",
         style: {fontSize: '.75rem', background: 'var(--danger)', color: '#fff'},
@@ -5260,7 +5325,40 @@ function CajaPage({
   /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 10}},
     /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {flex: 1}, onClick: printReporteFinal}, "\uD83D\uDDA8\uFE0F Imprimir Reporte"),
     /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowReporteFinal(false); }}, "Cerrar")
-  )))
+  ))),
+
+  /* === TICKETS DEL DIA === */
+  showTicketArchive && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setShowTicketArchive(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 500, maxHeight: '80vh', overflow: 'auto'}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDDD3\uFE0F Tickets del D\xEDa"),
+  /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 12}}, "Total: ", ticketList.length, " tickets impresos"),
+  ticketList.length === 0 ? /*#__PURE__*/React.createElement("p", {style: {color: 'var(--gray3)', fontSize: '.9rem'}}, "Sin tickets impresos hoy") :
+    ticketList.map(function(t) {
+      return /*#__PURE__*/React.createElement("div", {key: t._key, className: "card", style: {padding: 10, marginBottom: 8, background: '#f5f5f5'}},
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 6}},
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem'}}, "#", t.orderNum || '----'),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.7rem', color: 'var(--gray3)'}},
+              new Date(t.createdAt).toLocaleTimeString('es-PY', {hour:'2-digit', minute:'2-digit', second:'2-digit'})
+            )
+          ),
+          /*#__PURE__*/React.createElement("span", {style: {padding: '3px 10px', background: '#fff', borderRadius: 6, fontSize: '.75rem', fontWeight: 600}}, t.type)
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-sm btn-outline",
+          style: {width: '100%', fontSize: '.8rem'},
+          onClick: function() { silentPrint(t.html); }
+        }, "\uD83D\uDDA8\uFE0F Reimprimir")
+      );
+    }),
+  /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {width: '100%', marginTop: 10}, onClick: function() { setShowTicketArchive(false); }}, "Cerrar")
+  ))
   );
 }
 

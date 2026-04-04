@@ -251,11 +251,32 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
 @keyframes mesaPulse{0%,100%{box-shadow:0 0 0 0 rgba(230,81,0,.3)}50%{box-shadow:0 0 8px 2px rgba(230,81,0,.2)}}
 @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 @media(max-width:768px){.mesa-grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}}
+.toast-container{position:fixed;top:60px;right:16px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;padding:12px 20px;border-radius:10px;color:#fff;font-size:.9rem;font-weight:500;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:toastIn .3s ease,toastOut .3s ease 3.7s forwards;max-width:360px;font-family:'Inter',sans-serif}
+.toast-error{background:#e63946}.toast-success{background:#2d6a4f}.toast-warn{background:#e76f51}.toast-info{background:#457b9d}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script>const {
+<script>
+// ── Toast notification system (replaces blocking alert()) ──
+(function(){
+  var c = document.createElement('div');
+  c.className = 'toast-container';
+  document.body.appendChild(c);
+  window.showToast = function(msg, type) {
+    type = type || 'error';
+    var t = document.createElement('div');
+    t.className = 'toast toast-' + type;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
+  };
+})();
+
+const {
   useState,
   useEffect,
   useRef,
@@ -1100,7 +1121,7 @@ var TICKET_STYLES = 'body{font-family:monospace;width:72mm;margin:0 auto;padding
 
 function printTicket(order) {
   var w = window.open('', '_blank', 'width=320,height=600');
-  if (!w) return alert('Permitir ventanas emergentes para imprimir tickets');
+  if (!w) return showToast('Permitir ventanas emergentes para imprimir tickets','warn');
   w.document.write('<html><head><style>' + TICKET_STYLES + '</style></head><body>' +
     generateCashierTicketHtml(order) +
     '</body></html>');
@@ -1110,7 +1131,7 @@ function printTicket(order) {
 
 function printKitchenTicket(order) {
   var w = window.open('', '_blank', 'width=320,height=500');
-  if (!w) return alert('Permitir ventanas emergentes para imprimir tickets');
+  if (!w) return showToast('Permitir ventanas emergentes para imprimir tickets','warn');
   w.document.write('<html><head><style>' + TICKET_STYLES + '</style></head><body>' +
     generateKitchenTicketHtml(order) +
     '</body></html>');
@@ -1885,7 +1906,7 @@ function AppMain({
     if (!po) return;
     // Race condition guard: if already accepted by another mozo, reject
     if (po.status !== 'waiting') {
-      alert('Este pedido ya fue tomado por ' + (po.acceptedBy || 'otro mozo'));
+      showToast('Este pedido ya fue tomado por ' + (po.acceptedBy || 'otro mozo'),'warn');
       setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== preOrderKey; }); });
       return;
     }
@@ -3859,13 +3880,13 @@ function CajaPage({
   }
 
   function doDispatch(order) {
-    if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; }
-    if (!dispatchEntregador.trim()) { alert('Ingresá el nombre del entregador.'); return; }
+    if (!myOpenShift) { showToast('Debes abrir tu caja primero.','warn'); return; }
+    if (!dispatchEntregador.trim()) { showToast('Ingresá el nombre del entregador.','warn'); return; }
     var fee = getDispatchFee();
     var customerTotal = getDispatchCustomerTotal(order);
     var paymentGs = getDispatchPaymentGs();
     var change = getDispatchChange(order);
-    if (paymentGs < customerTotal) { alert('El monto del cliente no cubre el total (ticket + delivery).'); return; }
+    if (paymentGs < customerTotal) { showToast('El monto del cliente no cubre el total (ticket + delivery).','warn'); return; }
     var dispatchData = {
       status: 'dispatched',
       deliveryDispatch: {
@@ -3890,7 +3911,7 @@ function CajaPage({
   }
 
   function settleDelivery(order) {
-    if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; }
+    if (!myOpenShift) { showToast('Debes abrir tu caja primero.','warn'); return; }
     if (!order.deliveryDispatch) return;
     var dp = order.deliveryDispatch;
     // Mark as paid - only the ticket amount goes to the caja
@@ -4006,7 +4027,7 @@ function CajaPage({
   }
 
   function cobrarConMetodo(order, metodo, mixData) {
-    if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; }
+    if (!myOpenShift) { showToast('Debes abrir tu caja primero para poder cobrar.','warn'); return; }
     var disc = Number(discountAmount) || 0;
     var finalTotal = Math.max(0, (order.total || 0) - disc);
     var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now(), total: finalTotal};
@@ -4339,7 +4360,7 @@ function CajaPage({
     className: "btn btn-success",
     style: {flex: 1},
     onClick: () => {
-      if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; }
+      if (!myOpenShift) { showToast('Debes abrir tu caja primero para poder cobrar.','warn'); return; }
       setPayingOrder({...g.orders[0], items: g.orders.flatMap(o => ensureArray(o.items)), total: g.total, orderNum: g.label, _groupOrders: g.orders});
     }
   }, "\uD83D\uDCB5 Cobrar Todo (", formatGs(g.total), ")")))) :
@@ -4438,7 +4459,7 @@ function CajaPage({
   o.type === 'delivery' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-sm",
     style: {background: '#ff9800', color: '#fff', fontWeight: 700},
-    onClick: function() { if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; } setDispatchOrder(o); resetDispatchForm(); }
+    onClick: function() { if (!myOpenShift) { showToast('Debes abrir tu caja primero.','warn'); return; } setDispatchOrder(o); resetDispatchForm(); }
   }, "\uD83D\uDEB4 Despachar"),
   /* Dispatched: Liquidar button */
   o.status === 'dispatched' && /*#__PURE__*/React.createElement("button", {
@@ -4449,12 +4470,12 @@ function CajaPage({
   /* Non-delivery: Cobrar button (or delivery orders you also want to allow direct cobrar) */
   o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && (o.type !== 'delivery') && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success btn-sm",
-    onClick: () => { if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; } setPayingOrder(o); }
+    onClick: () => { if (!myOpenShift) { showToast('Debes abrir tu caja primero para poder cobrar.','warn'); return; } setPayingOrder(o); }
   }, "\uD83D\uDCB5 Cobrar"),
   /* Delivery not dispatched: also allow direct cobrar (e.g. customer picks up) */
   o.type === 'delivery' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success btn-sm",
-    onClick: () => { if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; } setPayingOrder(o); }
+    onClick: () => { if (!myOpenShift) { showToast('Debes abrir tu caja primero para poder cobrar.','warn'); return; } setPayingOrder(o); }
   }, "\uD83D\uDCB5 Cobrar"),
   o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
     style: {fontSize: '.7rem', color: 'var(--gray3)', fontWeight: 600}

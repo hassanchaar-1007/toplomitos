@@ -94,6 +94,7 @@ tr:active{background:var(--light)}
 .badge-ready{background:var(--success-light);color:var(--success)}
 .badge-served{background:#e2d9f3;color:#5a3d8a}
 .badge-paid{background:var(--gray);color:var(--gray3)}
+.badge-dispatched{background:#fff3e0;color:#e65100}
 .badge-awaiting_payment{background:#f8d7da;color:#842029}
 .badge-cancelled{background:var(--gray);color:var(--danger)}
 .menu-cats{display:flex;gap:6px;flex-wrap:nowrap;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;scrollbar-width:none}
@@ -1007,8 +1008,21 @@ const STATUS_LABEL = {
   ready: 'Listo',
   served: 'Servido',
   paid: 'Pagado',
+  dispatched: 'En Entrega',
   cancelled: 'Cancelado'
 };
+const DELIVERY_ZONES = [
+  {label: 'Zona 1', fee: 10000},
+  {label: 'Zona 2', fee: 15000},
+  {label: 'Zona 3', fee: 20000},
+  {label: 'Zona 4', fee: 25000},
+  {label: 'Personalizado', fee: 0}
+];
+const CURRENCIES = [
+  {code: 'PYG', symbol: 'Gs.', label: 'Guaraníes'},
+  {code: 'USD', symbol: 'US$', label: 'Dólares'},
+  {code: 'BRL', symbol: 'R$', label: 'Reales'}
+];
 function formatGs(n) {
   return 'Gs. ' + n.toLocaleString('es-PY');
 }
@@ -3736,6 +3750,21 @@ function CajaPage({
   const [floatAmount, setFloatAmount] = useState('');
   const isAdmin = userRole === 'admin';
 
+  // === DELIVERY DISPATCH STATE ===
+  const [dispatchOrder, setDispatchOrder] = useState(null);
+  const [dispatchEntregador, setDispatchEntregador] = useState('');
+  const [dispatchZoneIdx, setDispatchZoneIdx] = useState(0);
+  const [dispatchCustomFee, setDispatchCustomFee] = useState('');
+  const [dispatchCustomerPays, setDispatchCustomerPays] = useState('');
+  const [dispatchCurrency, setDispatchCurrency] = useState('PYG');
+  const [dispatchExRate, setDispatchExRate] = useState('');
+  const [settleOrder, setSettleOrder] = useState(null);
+
+  // === EXCHANGE RATES (admin configurable) ===
+  var exchangeRatesData = useFirebaseObj('config/exchangeRates', null);
+  var defaultRates = {USD: 7500, BRL: 1400};
+  var exchangeRates = exchangeRatesData ? Object.assign({}, defaultRates, exchangeRatesData) : defaultRates;
+
   // === SHIFT MANAGEMENT ===
   var dateKey = todayStr();
   var shiftsData = useFirebaseObj('cajaShifts/' + dateKey, null);
@@ -3804,6 +3833,88 @@ function CajaPage({
     });
     setShowCierreModal(false);
   }
+
+  // === DELIVERY DISPATCH FUNCTIONS ===
+  var deliveryOrders = orders.filter(function(o) { return o.type === 'delivery' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'archived'; });
+  var dispatchedOrders = orders.filter(function(o) { return o.status === 'dispatched'; });
+  var activeDispatchChangeOut = dispatchedOrders.reduce(function(s, o) { return s + ((o.deliveryDispatch && o.deliveryDispatch.changeGiven) || 0); }, 0);
+
+  function getDispatchFee() {
+    var zone = DELIVERY_ZONES[dispatchZoneIdx];
+    if (!zone) return 0;
+    return zone.fee === 0 ? (Number(dispatchCustomFee) || 0) : zone.fee;
+  }
+  function getDispatchCustomerTotal(order) {
+    if (!order) return 0;
+    return (order.total || 0) + getDispatchFee();
+  }
+  function getDispatchPaymentGs() {
+    var amt = Number(dispatchCustomerPays) || 0;
+    if (dispatchCurrency === 'PYG') return amt;
+    var rate = Number(dispatchExRate) || exchangeRates[dispatchCurrency] || 1;
+    return Math.round(amt * rate);
+  }
+  function getDispatchChange(order) {
+    return Math.max(0, getDispatchPaymentGs() - getDispatchCustomerTotal(order));
+  }
+
+  function doDispatch(order) {
+    if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; }
+    if (!dispatchEntregador.trim()) { alert('Ingresá el nombre del entregador.'); return; }
+    var fee = getDispatchFee();
+    var customerTotal = getDispatchCustomerTotal(order);
+    var paymentGs = getDispatchPaymentGs();
+    var change = getDispatchChange(order);
+    if (paymentGs < customerTotal) { alert('El monto del cliente no cubre el total (ticket + delivery).'); return; }
+    var dispatchData = {
+      status: 'dispatched',
+      deliveryDispatch: {
+        entregador: dispatchEntregador.trim(),
+        zoneFee: fee,
+        zoneLabel: DELIVERY_ZONES[dispatchZoneIdx] ? DELIVERY_ZONES[dispatchZoneIdx].label : 'Custom',
+        customerTotal: customerTotal,
+        customerPaysAmount: Number(dispatchCustomerPays) || 0,
+        customerPaysCurrency: dispatchCurrency,
+        exchangeRate: dispatchCurrency !== 'PYG' ? (Number(dispatchExRate) || exchangeRates[dispatchCurrency]) : null,
+        paymentInGs: paymentGs,
+        changeGiven: change,
+        dispatchedAt: Date.now(),
+        settled: false
+      }
+    };
+    onUpdateOrder(order.id, dispatchData);
+    // Save entregador name for quick reuse
+    fbUpdate('config/recentEntregadores/' + dispatchEntregador.trim().replace(/[.#$\/\[\]]/g, '_'), {name: dispatchEntregador.trim(), lastUsed: Date.now()});
+    setDispatchOrder(null);
+    resetDispatchForm();
+  }
+
+  function settleDelivery(order) {
+    if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; }
+    if (!order.deliveryDispatch) return;
+    var dp = order.deliveryDispatch;
+    // Mark as paid - only the ticket amount goes to the caja
+    onUpdateOrder(order.id, {
+      status: 'paid',
+      paymentMethod: 'efectivo',
+      paidAt: Date.now(),
+      deliveryDispatch: Object.assign({}, dp, {settled: true, settledAt: Date.now()})
+    });
+    setSettleOrder(null);
+  }
+
+  function resetDispatchForm() {
+    setDispatchEntregador('');
+    setDispatchZoneIdx(0);
+    setDispatchCustomFee('');
+    setDispatchCustomerPays('');
+    setDispatchCurrency('PYG');
+    setDispatchExRate('');
+  }
+
+  // Recent entregadores for autocomplete
+  var recentEntregadoresData = useFirebaseObj('config/recentEntregadores', null);
+  var recentEntregadores = recentEntregadoresData ? Object.keys(recentEntregadoresData).map(function(k) { return recentEntregadoresData[k]; }).sort(function(a,b) { return (b.lastUsed||0) - (a.lastUsed||0); }).slice(0,5) : [];
 
   function printCierreReport(shift) {
     var injList = shift.injections ? ensureArray(shift.injections) : [];
@@ -3998,7 +4109,7 @@ function CajaPage({
     // Add orders that weren't in any group
     return result.sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
   }
-  const shownRaw = filter === 'unpaid' ? unpaidOrders : filter === 'ready' ? readyOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
+  const shownRaw = filter === 'unpaid' ? unpaidOrders : filter === 'ready' ? readyOrders : filter === 'dispatched' ? dispatchedOrders : filter === 'active' ? allActive : filter === 'cancelled' ? cancelledOrders : filter === 'mesa' ? [] : paidToday;
   const shown = (filter === 'paid' || filter === 'cancelled') ? shownRaw : groupWithAgregados(shownRaw);
   return /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
@@ -4069,6 +4180,38 @@ function CajaPage({
       style: {fontSize: '.78rem'},
       onClick: function() { setShowReporteFinal(true); }
     }, "\uD83D\uDCCA Reporte Final del D\xEDa")
+  ),
+
+  /* === ACTIVE DELIVERIES PANEL === */
+  dispatchedOrders.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {padding: 14, marginBottom: 14, background: 'linear-gradient(135deg, #fff3e0, #ffe0b2)', border: '2px solid #ff9800'}
+  },
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10}},
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800, fontSize: '.95rem'}}, "\uD83D\uDEB4 Entregas Activas (", dispatchedOrders.length, ")"),
+      /*#__PURE__*/React.createElement("span", {style: {fontSize: '.8rem', color: '#e65100', fontWeight: 700}}, "\uD83D\uDCB5 Vuelto afuera: ", formatGs(activeDispatchChangeOut))
+    ),
+    dispatchedOrders.map(function(o) {
+      var dp = o.deliveryDispatch || {};
+      var elapsed = Math.round((Date.now() - (dp.dispatchedAt || 0)) / 60000);
+      return /*#__PURE__*/React.createElement("div", {key: o.id, style: {display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#fff', borderRadius: 8, marginBottom: 6, fontSize: '.82rem'}},
+        /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700}}, "#", o.orderNum, " \u2014 ", dp.entregador || '?'),
+          /*#__PURE__*/React.createElement("div", {style: {color: 'var(--gray3)', fontSize: '.75rem'}},
+            o.clientName || '', o.clientAddress ? ' \u2014 ' + o.clientAddress : '',
+            " \u23F1 ", elapsed, " min"
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem'}},
+            "Ticket: ", formatGs(o.total), " | Delivery: ", formatGs(dp.zoneFee || 0), " | Vuelto: ", formatGs(dp.changeGiven || 0)
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-success btn-sm",
+          style: {fontWeight: 700, whiteSpace: 'nowrap'},
+          onClick: function() { setSettleOrder(o); }
+        }, "\u2705 Liquidar")
+      );
+    })
   ),
 
   /*#__PURE__*/React.createElement("div", {
@@ -4157,7 +4300,11 @@ function CajaPage({
   }, "\u23F3 Sin Cobrar (", unpaidOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
     className: `cat-btn ${filter === 'ready' ? 'active' : ''}`,
     onClick: () => setFilter('ready')
-  }, "Por Cobrar (", readyOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
+  }, "Por Cobrar (", readyOrders.length, ")"), dispatchedOrders.length > 0 && /*#__PURE__*/React.createElement("button", {
+    className: `cat-btn ${filter === 'dispatched' ? 'active' : ''}`,
+    onClick: () => setFilter('dispatched'),
+    style: {background: '#ff9800', color: '#fff', borderColor: '#ff9800'}
+  }, "\uD83D\uDEB4 En Entrega (", dispatchedOrders.length, ")"), /*#__PURE__*/React.createElement("button", {
     className: `cat-btn ${filter === 'active' ? 'active' : ''}`,
     onClick: () => setFilter('active')
   }, "Activos"), /*#__PURE__*/React.createElement("button", {
@@ -4244,7 +4391,17 @@ function CajaPage({
       fontWeight: 700,
       marginBottom: 4
     }
-  }, "\uD83D\uDE97 ", o.vehicleDesc), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDE97 ", o.vehicleDesc),
+  /* Client info for delivery */
+  o.type === 'delivery' && o.clientName && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--dark2)', marginBottom: 2}}, "\uD83D\uDC64 ", o.clientName, o.clientPhone ? ' \uD83D\uDCDE ' + o.clientPhone : ''),
+  o.type === 'delivery' && o.clientAddress && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)', marginBottom: 2}}, "\uD83D\uDCCD ", o.clientAddress),
+  /* Dispatch info */
+  o.status === 'dispatched' && o.deliveryDispatch && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', padding: '4px 8px', background: '#fff3e0', borderRadius: 6, marginBottom: 4}},
+    /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: '#e65100'}}, "\uD83D\uDEB4 ", o.deliveryDispatch.entregador),
+    " \u2014 Vuelto: ", formatGs(o.deliveryDispatch.changeGiven || 0),
+    " \u23F1 ", Math.round((Date.now() - (o.deliveryDispatch.dispatchedAt || 0)) / 60000), " min"
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: '.82rem',
       color: 'var(--gray3)',
@@ -4276,21 +4433,41 @@ function CajaPage({
       flexWrap: 'wrap',
       justifyContent: 'flex-end'
     }
-  }, o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
+  },
+  /* Delivery: Despachar button */
+  o.type === 'delivery' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-sm",
+    style: {background: '#ff9800', color: '#fff', fontWeight: 700},
+    onClick: function() { if (!myOpenShift) { alert('Debes abrir tu caja primero.'); return; } setDispatchOrder(o); resetDispatchForm(); }
+  }, "\uD83D\uDEB4 Despachar"),
+  /* Dispatched: Liquidar button */
+  o.status === 'dispatched' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-sm",
+    style: {fontWeight: 700},
+    onClick: function() { setSettleOrder(o); }
+  }, "\u2705 Liquidar"),
+  /* Non-delivery: Cobrar button (or delivery orders you also want to allow direct cobrar) */
+  o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && (o.type !== 'delivery') && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-success btn-sm",
     onClick: () => { if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; } setPayingOrder(o); }
-  }, "\uD83D\uDCB5 Cobrar"), o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
+  }, "\uD83D\uDCB5 Cobrar"),
+  /* Delivery not dispatched: also allow direct cobrar (e.g. customer picks up) */
+  o.type === 'delivery' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-success btn-sm",
+    onClick: () => { if (!myOpenShift) { alert('Debes abrir tu caja primero para poder cobrar.'); return; } setPayingOrder(o); }
+  }, "\uD83D\uDCB5 Cobrar"),
+  o.status === 'paid' && /*#__PURE__*/React.createElement("span", {
     style: {fontSize: '.7rem', color: 'var(--gray3)', fontWeight: 600}
   }, o.paymentMethod === 'mixto' ? '\uD83D\uDD00 Mixto' : o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : o.paymentMethod === 'transferencia' ? '\uD83C\uDFE6 Transf.' : '\uD83D\uDCB5 Efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => setReceiptOrder(o)
-  }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
+  }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => {
       setEditOrder(o);
       setEditNotes(o.notes || '');
     }
-  }, "\u270F\uFE0F"), o.status !== 'paid' && o.status !== 'cancelled' && /*#__PURE__*/React.createElement("button", {
+  }, "\u270F\uFE0F"), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     style: {
       color: 'var(--danger)'
@@ -4642,6 +4819,211 @@ function CajaPage({
     onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); }
   }, "Cancelar"))),
 
+  /* === DISPATCH DELIVERY MODAL === */
+  dispatchOrder && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setDispatchOrder(null); resetDispatchForm(); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 440}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 4}}, "\uD83D\uDEB4 Despachar Delivery"),
+  /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', fontSize: '.85rem', marginBottom: 10}},
+    /*#__PURE__*/React.createElement("div", null, "#", dispatchOrder.orderNum, " \u2014 ", dispatchOrder.clientName || 'Sin nombre'),
+    dispatchOrder.clientAddress && /*#__PURE__*/React.createElement("div", {style: {color: 'var(--gray3)', fontSize: '.78rem'}}, "\uD83D\uDCCD ", dispatchOrder.clientAddress),
+    dispatchOrder.clientPhone && /*#__PURE__*/React.createElement("div", {style: {color: 'var(--gray3)', fontSize: '.78rem'}}, "\uD83D\uDCDE ", dispatchOrder.clientPhone),
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.2rem', marginTop: 4, color: 'var(--primary)'}}, "Ticket: ", formatGs(dispatchOrder.total))
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '8px 0'}}),
+
+  /* Entregador */
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+    /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "\uD83D\uDC64 Entregador"),
+    /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: dispatchEntregador,
+      onChange: function(e) { setDispatchEntregador(e.target.value); },
+      placeholder: "Nombre del entregador",
+      style: {width: '100%', padding: '10px 12px', border: '2px solid #ff9800', borderRadius: 8, fontSize: '.95rem', fontWeight: 600}
+    }),
+    recentEntregadores.length > 0 && !dispatchEntregador && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap'}},
+      recentEntregadores.map(function(e) {
+        return /*#__PURE__*/React.createElement("button", {
+          key: e.name,
+          className: "btn btn-outline btn-sm",
+          style: {fontSize: '.72rem', padding: '3px 8px'},
+          onClick: function() { setDispatchEntregador(e.name); }
+        }, e.name);
+      })
+    )
+  ),
+
+  /* Zona / Fee */
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+    /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "\uD83D\uDCCD Zona de Entrega"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4, flexWrap: 'wrap'}},
+      DELIVERY_ZONES.map(function(z, i) {
+        return /*#__PURE__*/React.createElement("button", {
+          key: i,
+          className: 'cat-btn ' + (dispatchZoneIdx === i ? 'active' : ''),
+          style: {fontSize: '.78rem', padding: '6px 10px'},
+          onClick: function() { setDispatchZoneIdx(i); }
+        }, z.fee > 0 ? formatGs(z.fee) : '\u270F\uFE0F Otro');
+      })
+    ),
+    dispatchZoneIdx === DELIVERY_ZONES.length - 1 && /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      value: dispatchCustomFee,
+      onChange: function(e) { setDispatchCustomFee(e.target.value); },
+      placeholder: "Monto delivery personalizado",
+      style: {width: '100%', marginTop: 6, padding: '8px 10px', border: '1px solid var(--gray)', borderRadius: 8, fontSize: '.9rem'}
+    })
+  ),
+
+  /* Customer payment */
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+    /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "\uD83D\uDCB0 El cliente paga con:"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, alignItems: 'center'}},
+      /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        value: dispatchCustomerPays,
+        onChange: function(e) { setDispatchCustomerPays(e.target.value); },
+        placeholder: "Monto",
+        style: {flex: 1, padding: '10px 12px', border: '2px solid var(--success)', borderRadius: 8, fontSize: '1.1rem', fontWeight: 700}
+      }),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 2}},
+        CURRENCIES.map(function(c) {
+          return /*#__PURE__*/React.createElement("button", {
+            key: c.code,
+            className: 'cat-btn ' + (dispatchCurrency === c.code ? 'active' : ''),
+            style: {fontSize: '.72rem', padding: '6px 8px'},
+            onClick: function() { setDispatchCurrency(c.code); }
+          }, c.symbol);
+        })
+      )
+    ),
+    dispatchCurrency !== 'PYG' && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, alignItems: 'center', marginTop: 6}},
+      /*#__PURE__*/React.createElement("span", {style: {fontSize: '.8rem', fontWeight: 600}}, "Tipo cambio: 1 ", dispatchCurrency === 'USD' ? 'US$' : 'R$', " ="),
+      /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        value: dispatchExRate || exchangeRates[dispatchCurrency] || '',
+        onChange: function(e) { setDispatchExRate(e.target.value); },
+        placeholder: String(exchangeRates[dispatchCurrency] || ''),
+        style: {width: 100, padding: '6px 8px', border: '1px solid var(--gray)', borderRadius: 6, fontSize: '.85rem', fontWeight: 600}
+      }),
+      /*#__PURE__*/React.createElement("span", {style: {fontSize: '.8rem'}}, "Gs.")
+    )
+  ),
+
+  /* Calculation summary */
+  Number(dispatchCustomerPays) > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {padding: 12, background: '#f5f5f5', marginBottom: 10}
+  },
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+      /*#__PURE__*/React.createElement("span", null, "\uD83C\uDF2F Ticket:"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(dispatchOrder.total))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+      /*#__PURE__*/React.createElement("span", null, "\uD83D\uDEB4 Delivery (", (DELIVERY_ZONES[dispatchZoneIdx] || {}).label || '', "):"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(getDispatchFee()))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', borderTop: '1px solid #ddd', paddingTop: 4, marginTop: 4}},
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, "Total cliente:"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800}}, formatGs(getDispatchCustomerTotal(dispatchOrder)))
+    ),
+    dispatchCurrency !== 'PYG' && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', color: '#1565c0'}},
+      /*#__PURE__*/React.createElement("span", null, "Pago en ", dispatchCurrency, ":"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, (dispatchCurrency === 'USD' ? 'US$ ' : 'R$ ') + (Number(dispatchCustomerPays) || 0).toLocaleString(), " = ", formatGs(getDispatchPaymentGs()))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', marginTop: 4}},
+      /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCB5 Cliente paga:"),
+      /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(getDispatchPaymentGs()))
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800, color: getDispatchChange(dispatchOrder) > 0 ? '#e65100' : 'var(--success)', marginTop: 4, paddingTop: 4, borderTop: '2px solid #ddd'}},
+      /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCB5 Vuelto a dar:"),
+      /*#__PURE__*/React.createElement("span", null, formatGs(getDispatchChange(dispatchOrder)))
+    )
+  ),
+
+  /* Dispatch buttons */
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 6}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn",
+      style: {flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 800, background: '#ff9800', color: '#fff'},
+      onClick: function() { doDispatch(dispatchOrder); }
+    }, "\uD83D\uDEB4 Despachar"),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline",
+      style: {flex: 1},
+      onClick: function() { setDispatchOrder(null); resetDispatchForm(); }
+    }, "Cancelar")
+  )
+  )),
+
+  /* === SETTLE DELIVERY MODAL === */
+  settleOrder && settleOrder.deliveryDispatch && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setSettleOrder(null); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 400}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  (function() {
+    var dp = settleOrder.deliveryDispatch;
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 8}}, "\u2705 Liquidar Entrega"),
+      /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', fontSize: '.85rem', marginBottom: 8}},
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700}}, "#", settleOrder.orderNum, " \u2014 ", settleOrder.clientName || ''),
+        /*#__PURE__*/React.createElement("div", {style: {color: '#e65100', fontWeight: 600}}, "\uD83D\uDC64 Entregador: ", dp.entregador)
+      ),
+      /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, background: '#f5f5f5', marginBottom: 10}},
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, marginBottom: 6}}, "\uD83D\uDCCB Resumen de la Entrega"),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+          /*#__PURE__*/React.createElement("span", null, "Ticket:"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(settleOrder.total))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+          /*#__PURE__*/React.createElement("span", null, "Delivery fee (", dp.zoneLabel, "):"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, formatGs(dp.zoneFee || 0))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem'}},
+          /*#__PURE__*/React.createElement("span", null, "Vuelto que se dio:"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: '#e65100'}}, formatGs(dp.changeGiven || 0))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '6px 0'}}),
+        /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, fontSize: '.9rem', marginBottom: 4}}, "\uD83D\uDD04 Al liquidar:"),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', color: '#2e7d32'}},
+          /*#__PURE__*/React.createElement("span", null, "Entregador entrega:"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800}}, formatGs(dp.paymentInGs || dp.customerTotal || 0))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', color: '#c62828'}},
+          /*#__PURE__*/React.createElement("span", null, "Cajera devuelve (delivery fee):"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 800}}, "-", formatGs(dp.zoneFee || 0))
+        ),
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800, marginTop: 6, paddingTop: 6, borderTop: '2px solid #ddd', color: 'var(--success)'}},
+          /*#__PURE__*/React.createElement("span", null, "Neto para la caja:"),
+          /*#__PURE__*/React.createElement("span", null, formatGs(settleOrder.total))
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8}},
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-success",
+          style: {flex: 1, padding: '14px', fontSize: '1rem', fontWeight: 800},
+          onClick: function() { settleDelivery(settleOrder); }
+        }, "\u2705 Confirmar Liquidaci\xF3n"),
+        /*#__PURE__*/React.createElement("button", {
+          className: "btn btn-outline",
+          style: {flex: 1},
+          onClick: function() { setSettleOrder(null); }
+        }, "Cancelar")
+      )
+    );
+  })()
+  )),
+
   /* === INJECTION MODAL === */
   showInjection && /*#__PURE__*/React.createElement("div", {
     className: "modal-overlay",
@@ -4709,12 +5091,29 @@ function CajaPage({
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCB5 Efectivo en caja:"),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"Sencillo + inyecciones:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"+ Ventas efectivo:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.efectivo))),
-    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:4, paddingTop:4, borderTop:'1px dashed #ccc'}}, /*#__PURE__*/React.createElement("span",null,"Total f\xEDsico en caja:"), /*#__PURE__*/React.createElement("span",null, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0) + myShiftSales.efectivo)))
+    activeDispatchChangeOut > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', color:'#e65100'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDEB4 Vuelto en entregas:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, "-", formatGs(activeDispatchChangeOut))),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:4, paddingTop:4, borderTop:'1px dashed #ccc'}}, /*#__PURE__*/React.createElement("span",null,"Total f\xEDsico en caja:"), /*#__PURE__*/React.createElement("span",null, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0) + myShiftSales.efectivo - activeDispatchChangeOut)))
   ),
   /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fce4ec'}},
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCE6 Al cerrar turno:"),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.9rem'}}, /*#__PURE__*/React.createElement("span",null,"Llevar a caja fuerte:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:800, color:'var(--danger)', fontSize:'1.1rem'}}, formatGs(myShiftSales.efectivo))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', marginTop:4}}, /*#__PURE__*/React.createElement("span",null,"Queda sencillo en caja:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs((myOpenShift.openingFloat || 0) + (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0))))
+  ),
+  /* Pending deliveries warning */
+  dispatchedOrders.length > 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fff3e0', border: '2px solid #ff9800'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4, color: '#e65100'}}, "\u26A0\uFE0F Entregas Pendientes (", dispatchedOrders.length, ")"),
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.82rem', color: 'var(--gray3)', marginBottom: 6}}, "Hay entregas no liquidadas. El vuelto dado sale de tu caja. La liquidaci\xF3n entrar\xE1 al turno siguiente."),
+    dispatchedOrders.map(function(o) {
+      var dp = o.deliveryDispatch || {};
+      return /*#__PURE__*/React.createElement("div", {key: o.id, style: {display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '3px 0'}},
+        /*#__PURE__*/React.createElement("span", null, "#", o.orderNum, " \u2014 ", dp.entregador || '?'),
+        /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700, color: '#e65100'}}, "Vuelto: ", formatGs(dp.changeGiven || 0))
+      );
+    }),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.9rem', fontWeight: 800, marginTop: 4, paddingTop: 4, borderTop: '1px dashed #ff9800'}},
+      /*#__PURE__*/React.createElement("span", null, "Total vuelto afuera:"),
+      /*#__PURE__*/React.createElement("span", {style: {color: '#e65100'}}, formatGs(activeDispatchChangeOut))
+    )
   ),
   (myShiftSales.tarjeta > 0 || myShiftSales.qr > 0 || myShiftSales.transferencia > 0) && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 12, background: '#e3f2fd'}},
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCCB Comprobantes a verificar:"),

@@ -1173,6 +1173,9 @@ function printKitchenTicket(order) {
 }
 
 function silentPrint(html) {
+  // Only print if user has enabled printing (config flag)
+  // This prevents the native print dialog from blocking the UI
+  if (window._printingEnabled === false) { return; }
   var frame = document.createElement('iframe');
   frame.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;';
   document.body.appendChild(frame);
@@ -1182,7 +1185,7 @@ function silentPrint(html) {
   doc.close();
   setTimeout(function() {
     try { frame.contentWindow.print(); } catch(e) { console.warn('Print error', e); }
-    setTimeout(function() { document.body.removeChild(frame); }, 2000);
+    setTimeout(function() { if (frame.parentNode) document.body.removeChild(frame); }, 2000);
   }, 500);
 }
 

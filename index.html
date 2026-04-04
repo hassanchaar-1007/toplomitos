@@ -5801,16 +5801,27 @@ function MarcacionPage({
   const [marcTab, setMarcTab] = useState('hoy');
   const [histDays, setHistDays] = useState(7);
   const [histEmployee, setHistEmployee] = useState('todos');
-  function handleClock() {
-    const emp = employees.find(e => e.pin === pin);
-    if (!emp) {
-      setMessage({
-        type: 'error',
-        text: 'PIN no encontrado'
-      });
-      setPin('');
-      return;
-    }
+  const [geoChecking, setGeoChecking] = useState(false);
+
+  // Geolocation config for clock-in/out restriction
+  var GEO_CONFIG = {
+    lat: -25.525208809790936,
+    lng: -54.618415404390674,
+    radiusMeters: 100
+  };
+
+  function haversineDistance(lat1, lon1, lat2, lon2) {
+    var R = 6371000; // Earth radius in meters
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  function doClock(emp) {
     const today = now.toDateString();
     const existing = clockRecords.find(r => r.employeeId === emp.id && r.date === today && !r.clockOut);
     if (existing) {
@@ -5819,7 +5830,7 @@ function MarcacionPage({
       });
       setMessage({
         type: 'out',
-        text: `👋 Salida: ${emp.name} — ${now.toLocaleTimeString('es-PY', {
+        text: `\uD83D\uDC4B Salida: ${emp.name} \u2014 ${now.toLocaleTimeString('es-PY', {
           hour: '2-digit',
           minute: '2-digit'
         })}`
@@ -5835,7 +5846,7 @@ function MarcacionPage({
       });
       setMessage({
         type: 'in',
-        text: `✅ Entrada: ${emp.name} — ${now.toLocaleTimeString('es-PY', {
+        text: `\u2705 Entrada: ${emp.name} \u2014 ${now.toLocaleTimeString('es-PY', {
           hour: '2-digit',
           minute: '2-digit'
         })}`
@@ -5843,6 +5854,54 @@ function MarcacionPage({
     }
     setPin('');
     setTimeout(() => setMessage(null), 4000);
+  }
+
+  function handleClock() {
+    const emp = employees.find(e => e.pin === pin);
+    if (!emp) {
+      setMessage({
+        type: 'error',
+        text: 'PIN no encontrado'
+      });
+      setPin('');
+      return;
+    }
+    // Admin bypass — no geo check needed
+    if (emp.role === 'admin') {
+      doClock(emp);
+      return;
+    }
+    // Geolocation check for all other roles
+    if (!navigator.geolocation) {
+      setMessage({ type: 'error', text: '\uD83D\uDCCD Tu navegador no soporta geolocalizaci\u00F3n. Us\u00E1 Chrome o Safari.' });
+      setPin('');
+      return;
+    }
+    setGeoChecking(true);
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        setGeoChecking(false);
+        var dist = haversineDistance(pos.coords.latitude, pos.coords.longitude, GEO_CONFIG.lat, GEO_CONFIG.lng);
+        if (dist <= GEO_CONFIG.radiusMeters) {
+          doClock(emp);
+        } else {
+          var distKm = dist >= 1000 ? (dist / 1000).toFixed(1) + ' km' : Math.round(dist) + 'm';
+          setMessage({ type: 'error', text: '\uD83D\uDEAB No pod\u00E9s marcar desde esta ubicaci\u00F3n. Est\u00E1s a ' + distKm + ' del local. Deb\u00E9s estar dentro de ' + GEO_CONFIG.radiusMeters + 'm.' });
+          setPin('');
+          setTimeout(() => setMessage(null), 6000);
+        }
+      },
+      function(err) {
+        setGeoChecking(false);
+        var msg = err.code === 1 ? 'Permiso de ubicaci\u00F3n denegado. Activ\u00E1 el GPS y permit\u00ED el acceso.' :
+                  err.code === 2 ? 'No se pudo obtener la ubicaci\u00F3n. Verific\u00E1 tu GPS.' :
+                  'Tiempo agotado obteniendo ubicaci\u00F3n. Intent\u00E1 de nuevo.';
+        setMessage({ type: 'error', text: '\uD83D\uDCCD ' + msg });
+        setPin('');
+        setTimeout(() => setMessage(null), 6000);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
   }
   const todayRecords = clockRecords.filter(r => r.date === now.toDateString());
 
@@ -5891,11 +5950,13 @@ function MarcacionPage({
   }), /*#__PURE__*/React.createElement("button", {
     className: "btn btn-primary",
     type: "submit",
+    disabled: geoChecking,
     style: {
       whiteSpace: 'nowrap',
-      flexShrink: 0
+      flexShrink: 0,
+      opacity: geoChecking ? 0.6 : 1
     }
-  }, "Marcar")), message && /*#__PURE__*/React.createElement("div", {
+  }, geoChecking ? "\uD83D\uDCCD Verificando..." : "Marcar")), message && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
       marginTop: 14,

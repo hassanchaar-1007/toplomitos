@@ -256,6 +256,15 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
 .toast-error{background:#e63946}.toast-success{background:#2d6a4f}.toast-warn{background:#e76f51}.toast-info{background:#457b9d}
 @keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
 @keyframes toastOut{from{opacity:1}to{opacity:0;transform:translateY(-10px)}}
+.confirm-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100000}
+.confirm-modal-box{background:#fff;border-radius:14px;padding:24px;max-width:400px;width:90%;box-shadow:0 8px 30px rgba(0,0,0,.2)}
+.confirm-modal-message{margin:0 0 20px;font-size:.95rem;color:#333;line-height:1.5}
+.confirm-modal-buttons{display:flex;gap:12px;justify-content:center}
+.confirm-modal-btn{padding:10px 28px;border:none;border-radius:8px;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:.2s}
+.confirm-modal-btn-yes{background:#2d6a4f;color:#fff}
+.confirm-modal-btn-yes:hover{background:#245c45}
+.confirm-modal-btn-no{background:#e9ecef;color:#333}
+.confirm-modal-btn-no:hover{background:#dee2e6}
 </style>
 </head>
 <body>
@@ -273,6 +282,30 @@ input[type="text"],input[type="password"],input[type="number"],select,textarea{f
     t.textContent = msg;
     c.appendChild(t);
     setTimeout(function(){ if (t.parentNode) t.parentNode.removeChild(t); }, 4000);
+  };
+})();
+
+// ── Confirm modal system (replaces blocking confirm()) ──
+(function(){
+  window._confirmState = {
+    visible: false,
+    message: '',
+    onYes: null,
+    onNo: null
+  };
+  window.askConfirm = function(msg, onYes) {
+    window._confirmState.visible = true;
+    window._confirmState.message = msg;
+    window._confirmState.onYes = onYes;
+    window._confirmState.onNo = null;
+    if (window._confirmRender) window._confirmRender();
+  };
+  window._confirmClose = function(result) {
+    window._confirmState.visible = false;
+    if (result && window._confirmState.onYes) {
+      window._confirmState.onYes();
+    }
+    if (window._confirmRender) window._confirmRender();
   };
 })();
 
@@ -1648,6 +1681,34 @@ function ClienteMenuView({ mesaNum, menuOnly }) {
   );
 }
 
+// ConfirmModal Component - renders the confirm modal
+function ConfirmModal() {
+  const [confirmState, setConfirmState] = useState({visible: false, message: '', onYes: null});
+  useEffect(() => {
+    window._confirmRender = () => {
+      setConfirmState({...window._confirmState});
+    };
+  }, []);
+  const handleYes = () => {
+    window._confirmClose(true);
+    setConfirmState({visible: false, message: '', onYes: null});
+  };
+  const handleNo = () => {
+    window._confirmClose(false);
+    setConfirmState({visible: false, message: '', onYes: null});
+  };
+  if (!confirmState.visible) return null;
+  return /*#__PURE__*/React.createElement("div", {className: "confirm-modal-overlay"},
+    /*#__PURE__*/React.createElement("div", {className: "confirm-modal-box"},
+      /*#__PURE__*/React.createElement("div", {className: "confirm-modal-message"}, confirmState.message),
+      /*#__PURE__*/React.createElement("div", {className: "confirm-modal-buttons"},
+        /*#__PURE__*/React.createElement("button", {className: "confirm-modal-btn confirm-modal-btn-no", onClick: handleNo}, "Cancelar"),
+        /*#__PURE__*/React.createElement("button", {className: "confirm-modal-btn confirm-modal-btn-yes", onClick: handleYes}, "Confirmar")
+      )
+    )
+  );
+}
+
 function App() {
   const [fbConnected, setFbConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1711,14 +1772,17 @@ function App() {
       color: 'var(--danger)'
     }
   }, "Error de conexi\xF3n. Verificar Firebase.")));
-  return /*#__PURE__*/React.createElement(AppMain, {
-    user: user,
-    setUser: setUser,
-    page: page,
-    setPage: setPage,
-    now: now,
-    connStatus: connStatus
-  });
+  return /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement(ConfirmModal, null),
+    /*#__PURE__*/React.createElement(AppMain, {
+      user: user,
+      setUser: setUser,
+      page: page,
+      setPage: setPage,
+      now: now,
+      connStatus: connStatus
+    })
+  );
 }
 
 // Sound notification helper
@@ -2125,29 +2189,32 @@ function AppMain({
     fbRemove('stock/' + id);
   }
   async function resetDay() {
-    if (!confirm('¿Resetear el día? Se borran los pedidos de hoy, el historial del día, los turnos de caja y el contador vuelve a 0001.')) return;
-    const dk = todayStr();
-    const todayKeys = orders.filter(o => o.date === dk).map(o => o._key || o.id);
-    const updates = {};
-    // Delete today's orders completely
-    todayKeys.forEach(k => { updates['orders/' + k] = null; });
-    // Reset daily counter
-    updates['counters/' + dk] = null;
-    // Clear caja shifts for today (resets sencillo)
-    updates['cajaShifts/' + dk] = null;
-    // Clear today's history
-    updates['history/' + dk] = null;
-    await db.ref().update(updates);
+    askConfirm('¿Resetear el día? Se borran los pedidos de hoy, el historial del día, los turnos de caja y el contador vuelve a 0001.', async function() {
+      const dk = todayStr();
+      const todayKeys = orders.filter(o => o.date === dk).map(o => o._key || o.id);
+      const updates = {};
+      // Delete today's orders completely
+      todayKeys.forEach(k => { updates['orders/' + k] = null; });
+      // Reset daily counter
+      updates['counters/' + dk] = null;
+      // Clear caja shifts for today (resets sencillo)
+      updates['cajaShifts/' + dk] = null;
+      // Clear today's history
+      updates['history/' + dk] = null;
+      await db.ref().update(updates);
+    });
   }
   async function resetGeneral() {
-    if (!confirm('⚠️ RESET GENERAL: ¿Borrar TODOS los pedidos de TODOS los días? Esto NO se puede deshacer.')) return;
-    if (!confirm('¿Estás SEGURO? Se perderá todo el historial.')) return;
-    const updates = {};
-    updates['orders'] = null;
-    updates['counters'] = null;
-    updates['listaCompras'] = null;
-    updates['solicitudes'] = null;
-    await db.ref().update(updates);
+    askConfirm('⚠️ RESET GENERAL: ¿Borrar TODOS los pedidos de TODOS los días? Esto NO se puede deshacer.', function() {
+      askConfirm('¿Estás SEGURO? Se perderá todo el historial.', async function() {
+        const updates = {};
+        updates['orders'] = null;
+        updates['counters'] = null;
+        updates['listaCompras'] = null;
+        updates['solicitudes'] = null;
+        await db.ref().update(updates);
+      });
+    });
   }
   if (!user) return /*#__PURE__*/React.createElement(LoginScreen, {
     employees: employees,
@@ -5147,10 +5214,10 @@ function CajaPage({
       className: "btn btn-danger",
       style: {flex: 1, padding: '12px'},
       onClick: function() {
-        if (confirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.')) {
+        askConfirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.', function() {
           closeShift();
           printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalDiscounts: myShiftSales.discounts, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
-        }
+        });
       }
     }, "\uD83D\uDD12 Confirmar Cierre e Imprimir"),
     /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowCierreModal(false); }}, "Cancelar")
@@ -5338,7 +5405,7 @@ function StockPage({
         color: 'var(--danger)'
       },
       onClick: () => {
-        if (confirm('¿Eliminar ' + s.name + '?')) removeStockItem(s._key || s.id);
+        askConfirm('¿Eliminar ' + s.name + '?', function() { removeStockItem(s._key || s.id); });
       }
     }, "\uD83D\uDDD1\uFE0F")));
   }), showModal && /*#__PURE__*/React.createElement("div", {
@@ -6581,7 +6648,7 @@ function EmpleadosPage({
       color: 'var(--danger)'
     },
     onClick: () => {
-      if (confirm('¿Eliminar a ' + e.name + '?')) removeEmployee(e._key || e.id);
+      askConfirm('¿Eliminar a ' + e.name + '?', function() { removeEmployee(e._key || e.id); });
     }
   }, "\uD83D\uDDD1\uFE0F")))), showModal && /*#__PURE__*/React.createElement("div", {
     className: "modal-overlay",
@@ -6682,10 +6749,11 @@ function PrepDashboardPage({user}) {
     fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}));
   }
   function markPurchasing() {
-    if (!confirm('\u00BFConfirmar compra de ' + items.length + ' \u00EDtems?')) return;
-    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
-      status: 'purchasing', purchasingBy: user.name, purchasingAt: Date.now(), updatedBy: user.name, updatedAt: Date.now()
-    }));
+    askConfirm('\u00BFConfirmar compra de ' + items.length + ' \u00EDtems?', function() {
+      fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
+        status: 'purchasing', purchasingBy: user.name, purchasingAt: Date.now(), updatedBy: user.name, updatedAt: Date.now()
+      }));
+    });
   }
   function confirmItemReceived(idx) {
     var updated = items.map(function(it, i) {
@@ -6838,15 +6906,16 @@ function ListaComprasPage({user}) {
     fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {items: updated, updatedBy: user.name, updatedAt: Date.now()}));
   }
   function finalizeLista() {
-    if (!confirm('¿Finalizar y enviar a Preparación?')) return;
-    fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
-      status: 'finalized',
-      finalizedBy: user.name,
-      finalizedAt: Date.now(),
-      updatedBy: user.name,
-      updatedAt: Date.now(),
-      notifyPrep: true
-    }));
+    askConfirm('¿Finalizar y enviar a Preparación?', function() {
+      fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {
+        status: 'finalized',
+        finalizedBy: user.name,
+        finalizedAt: Date.now(),
+        updatedBy: user.name,
+        updatedAt: Date.now(),
+        notifyPrep: true
+      }));
+    });
   }
   function reopenLista() {
     fbSet('listaCompras/' + dateKey, Object.assign({}, lista, {

@@ -2224,6 +2224,8 @@ function AppMain({
       updates['history/' + dk] = null;
       // Clear ticket archive for today
       updates['ticketArchive/' + dk] = null;
+      // Clear paid history for today
+      updates['paidHistory/' + dk] = null;
       await db.ref().update(updates);
     });
   }
@@ -3891,11 +3893,24 @@ function CajaPage({
   const [showInjection, setShowInjection] = useState(false);
   const [floatAmount, setFloatAmount] = useState('');
   const [showTicketArchive, setShowTicketArchive] = useState(false);
+  const [showDetailedHistory, setShowDetailedHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
   const isAdmin = userRole === 'admin';
 
   // === TICKET ARCHIVE ===
   var ticketArchiveData = useFirebaseObj('ticketArchive/' + todayStr(), null);
   var ticketList = ticketArchiveData ? Object.keys(ticketArchiveData).map(function(k) { return Object.assign({_key: k}, ticketArchiveData[k]); }).sort(function(a,b) { return (b.createdAt||0) - (a.createdAt||0); }) : [];
+
+  // === PAID HISTORY (detailed, survives shift close, clears next day) ===
+  var paidHistoryData = useFirebaseObj('paidHistory/' + todayStr(), null);
+  var paidHistoryList = paidHistoryData ? Object.keys(paidHistoryData).map(function(k) { return Object.assign({_key: k}, paidHistoryData[k]); }).sort(function(a,b) { return (b.paidAt||0) - (a.paidAt||0); }) : [];
+  var filteredHistory = historySearch ? paidHistoryList.filter(function(h) {
+    var q = historySearch.toLowerCase();
+    return (h.orderNum && String(h.orderNum).toLowerCase().includes(q)) ||
+           (h.waiter && h.waiter.toLowerCase().includes(q)) ||
+           (h.customerName && h.customerName.toLowerCase().includes(q)) ||
+           (h.type && h.type.toLowerCase().includes(q));
+  }) : paidHistoryList;
 
   // === DELIVERY DISPATCH STATE ===
   const [dispatchOrder, setDispatchOrder] = useState(null);
@@ -3922,6 +3937,19 @@ function CajaPage({
   function openShift() {
     var amt = Number(floatAmount) || 0;
     var shiftKey = userName.replace(/\s/g, '_') + '_' + Date.now();
+    // Clear previous day's paid history to free memory
+    // Check all paidHistory dates and remove any that aren't today
+    db.ref('paidHistory').once('value', function(snap) {
+      var allDates = snap.val();
+      if (allDates) {
+        var today = todayStr();
+        var updates = {};
+        Object.keys(allDates).forEach(function(dk) {
+          if (dk !== today) updates['paidHistory/' + dk] = null;
+        });
+        if (Object.keys(updates).length > 0) db.ref().update(updates);
+      }
+    });
     fbSet('cajaShifts/' + dateKey + '/' + shiftKey, {
       cashier: userName,
       startedAt: Date.now(),
@@ -4040,12 +4068,32 @@ function CajaPage({
     if (!myOpenShift) { showToast('Debes abrir tu caja primero.','warn'); return; }
     if (!order.deliveryDispatch) return;
     var dp = order.deliveryDispatch;
+    var now = Date.now();
     // Mark as paid - only the ticket amount goes to the caja
     onUpdateOrder(order.id, {
       status: 'paid',
       paymentMethod: 'efectivo',
-      paidAt: Date.now(),
-      deliveryDispatch: Object.assign({}, dp, {settled: true, settledAt: Date.now()})
+      paidAt: now,
+      deliveryDispatch: Object.assign({}, dp, {settled: true, settledAt: now})
+    });
+    // Store in detailed paid history
+    var histKey = (order.orderNum || 'unknown') + '_' + now;
+    fbSet('paidHistory/' + todayStr() + '/' + histKey, {
+      orderNum: order.orderNum || '----',
+      type: 'delivery',
+      items: ensureArray(order.items).map(function(it) { return {name: it.name, qty: it.qty, price: it.price || 0}; }),
+      total: order.total || 0,
+      originalTotal: order.total || 0,
+      discount: 0,
+      paymentMethod: 'efectivo',
+      waiter: order.waiter || '',
+      customerName: order.clientName || order.customerName || '',
+      customerPhone: order.clientPhone || '',
+      deliveryAddress: order.clientAddress || '',
+      entregador: dp.entregador || '',
+      deliveryFee: dp.zoneFee || 0,
+      paidAt: now,
+      cashier: userName
     });
     setSettleOrder(null);
   }
@@ -4062,6 +4110,44 @@ function CajaPage({
   // Recent entregadores for autocomplete
   var recentEntregadoresData = useFirebaseObj('config/recentEntregadores', null);
   var recentEntregadores = recentEntregadoresData ? Object.keys(recentEntregadoresData).map(function(k) { return recentEntregadoresData[k]; }).sort(function(a,b) { return (b.lastUsed||0) - (a.lastUsed||0); }).slice(0,5) : [];
+
+  function printDetailedHistory() {
+    if (paidHistoryList.length === 0) return;
+    var totalGeneral = paidHistoryList.reduce(function(s, h) { return s + (h.total || 0); }, 0);
+    var totalDescuentos = paidHistoryList.reduce(function(s, h) { return s + (h.discount || 0); }, 0);
+    var html = '<html><head><style>' + TICKET_STYLES + ' .item-row{display:flex;justify-content:space-between;font-size:11px;padding:1px 0;} .item-qty{font-weight:700;margin-right:4px;} .sec{border:1px solid #ccc;padding:6px;margin:4px 0;border-radius:4px;} .met{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:#e3f2fd;}</style></head><body><div class="ticket" style="max-width:320px">' +
+      '<div class="c b big">TOP LOMITOS</div>' +
+      '<div class="c">HISTORIAL DETALLADO DE TICKETS</div>' +
+      '<div class="c" style="font-size:11px">' + new Date().toLocaleDateString('es-PY') + ' - ' + new Date().toLocaleTimeString('es-PY', {hour:'2-digit',minute:'2-digit'}) + '</div>' +
+      '<div class="c" style="font-size:11px">' + paidHistoryList.length + ' pedidos cobrados</div>' +
+      '<div class="ln"></div>';
+    paidHistoryList.forEach(function(h) {
+      var typeLabel = h.type === 'delivery' ? 'Delivery' : h.type === 'vehiculo' ? 'Vehiculo' : 'Mesa ' + (h.tableNum || '');
+      var metLabel = h.paymentMethod === 'efectivo' ? 'Efectivo' : h.paymentMethod === 'tarjeta' ? 'Tarjeta' : h.paymentMethod === 'qr' ? 'QR' : h.paymentMethod === 'transferencia' ? 'Transfer.' : h.paymentMethod === 'mixto' ? 'Mixto' : h.paymentMethod || '';
+      html += '<div class="sec">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center"><div class="b">#' + (h.orderNum || '----') + ' - ' + typeLabel + '</div><span class="met">' + metLabel + '</span></div>';
+      html += '<div style="font-size:10px;color:#666">' + new Date(h.paidAt).toLocaleTimeString('es-PY', {hour:'2-digit',minute:'2-digit'}) + (h.waiter ? ' | Mozo: ' + h.waiter : '') + (h.cashier ? ' | Cajera: ' + h.cashier : '') + '</div>';
+      if (h.customerName) html += '<div style="font-size:10px">Cliente: ' + h.customerName + (h.customerPhone ? ' - ' + h.customerPhone : '') + '</div>';
+      if (h.deliveryAddress) html += '<div style="font-size:10px">Dir: ' + h.deliveryAddress + '</div>';
+      if (h.vehicleDesc) html += '<div style="font-size:10px">Vehiculo: ' + h.vehicleDesc + '</div>';
+      var items = ensureArray(h.items);
+      items.forEach(function(it) {
+        html += '<div class="item-row"><span><span class="item-qty">' + (it.qty || 1) + 'x</span>' + (it.name || '') + '</span><span>' + formatGs(it.price * (it.qty || 1)) + '</span></div>';
+      });
+      if (h.discount > 0) html += '<div class="item-row" style="color:#c62828"><span>Descuento:</span><span>-' + formatGs(h.discount) + '</span></div>';
+      html += '<div class="r b" style="margin-top:2px;border-top:1px dashed #ccc;padding-top:2px"><span>TOTAL:</span><span>' + formatGs(h.total) + '</span></div>';
+      if (h.paymentMethod === 'mixto') {
+        html += '<div style="font-size:10px;color:#666">Efectivo: ' + formatGs(h.mixEfectivo || 0) + ' | ' + (h.mixOtroMetodo || 'tarjeta') + ': ' + formatGs(h.mixOtro || 0) + '</div>';
+      }
+      html += '</div>';
+    });
+    html += '<div class="ln"></div>';
+    if (totalDescuentos > 0) html += '<div class="r" style="color:#c62828"><span>Total descuentos:</span><span>-' + formatGs(totalDescuentos) + '</span></div>';
+    html += '<div class="r b big"><span>TOTAL GENERAL:</span><span>' + formatGs(totalGeneral) + '</span></div>';
+    html += '</div></body></html>';
+    silentPrint(html);
+    archiveTicket('historial', 'HISTORIAL_DETALLADO', html, 'historial_' + Date.now());
+  }
 
   function printCierreReport(shift) {
     var injList = shift.injections ? ensureArray(shift.injections) : [];
@@ -4192,6 +4278,34 @@ function CajaPage({
     var cashierHtml = '<html><head><style>' + TICKET_STYLES + '</style></head><body>' + generateCashierTicketHtml(ticketOrder) + '</body></html>';
     silentPrint(cashierHtml);
     archiveTicket('caja', order.orderNum, cashierHtml, order._key || order.id);
+    // Store full order details for detailed history (survives shift close)
+    var histKey = (order.orderNum || 'unknown') + '_' + Date.now();
+    var histItems = order._groupOrders
+      ? order._groupOrders.flatMap(function(go) { return ensureArray(go.items); })
+      : ensureArray(order.items);
+    var histData = {
+      orderNum: order.orderNum || '----',
+      type: order.type || 'mesa',
+      items: histItems.map(function(it) { return {name: it.name, qty: it.qty, price: it.price || 0}; }),
+      total: finalTotal,
+      originalTotal: order.total || 0,
+      discount: disc,
+      paymentMethod: payData.paymentMethod,
+      waiter: order.waiter || '',
+      customerName: order.clientName || order.customerName || '',
+      customerPhone: order.clientPhone || '',
+      tableNum: order.tableNum || '',
+      vehicleDesc: order.vehicleDesc || '',
+      deliveryAddress: order.clientAddress || '',
+      paidAt: payData.paidAt,
+      cashier: userName
+    };
+    if (payData.paymentMethod === 'mixto') {
+      histData.mixEfectivo = payData.mixEfectivo;
+      histData.mixOtro = payData.mixOtro;
+      histData.mixOtroMetodo = payData.mixOtroMetodo;
+    }
+    fbSet('paidHistory/' + todayStr() + '/' + histKey, histData);
   }
   // Group unpaid orders by mesa/vehicle for "Por Mesa" view
   const mesaGroups = useMemo(() => {
@@ -4329,13 +4443,18 @@ function CajaPage({
     /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6, fontWeight: 700}}, "Ventas turno: ", formatGs(myShiftSales.total), " (", myShiftSales.count, " ped.)")
   )),
 
-  /* === REPORTE FINAL (admin + cajeras) === */
-  closedShifts.length > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10}},
-    /*#__PURE__*/React.createElement("button", {
+  /* === REPORTE FINAL + HISTORIAL DETALLADO === */
+  (closedShifts.length > 0 || paidHistoryList.length > 0) && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap'}},
+    closedShifts.length > 0 && /*#__PURE__*/React.createElement("button", {
       className: "btn btn-outline btn-sm",
       style: {fontSize: '.78rem'},
       onClick: function() { setShowReporteFinal(true); }
-    }, "\uD83D\uDCCA Reporte Final del D\xEDa")
+    }, "\uD83D\uDCCA Reporte Final del D\xEDa"),
+    paidHistoryList.length > 0 && /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      style: {fontSize: '.78rem', borderColor: '#1565c0', color: '#1565c0'},
+      onClick: function() { setShowDetailedHistory(true); }
+    }, "\uD83D\uDCCB Historial Detallado (", paidHistoryList.length, ")")
   ),
 
   /* === ACTIVE DELIVERIES PANEL === */
@@ -5358,7 +5477,83 @@ function CajaPage({
       );
     }),
   /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {width: '100%', marginTop: 10}, onClick: function() { setShowTicketArchive(false); }}, "Cerrar")
-  ))
+  )),
+
+  /* === HISTORIAL DETALLADO MODAL === */
+  showDetailedHistory && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setShowDetailedHistory(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 550, maxHeight: '90vh', overflow: 'auto'}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDCCB Historial Detallado de Tickets"),
+  /*#__PURE__*/React.createElement("div", {style: {fontSize: '.8rem', color: 'var(--gray3)', marginBottom: 8}},
+    new Date().toLocaleDateString('es-PY'), " \u2014 ", paidHistoryList.length, " pedidos cobrados",
+    paidHistoryList.length > 0 ? ' \u2014 Total: ' + formatGs(paidHistoryList.reduce(function(s,h){return s+(h.total||0);},0)) : ''
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10}},
+    /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: historySearch,
+      onChange: function(e) { setHistorySearch(e.target.value); },
+      placeholder: "Buscar por #pedido, mozo, cliente, tipo...",
+      style: {flex: 1, padding: '8px 12px', border: '2px solid #e0e0e0', borderRadius: 8, fontSize: '.85rem'}
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-primary btn-sm",
+      style: {fontSize: '.78rem', whiteSpace: 'nowrap'},
+      onClick: printDetailedHistory
+    }, "\uD83D\uDDA8\uFE0F Imprimir Todo")
+  ),
+  filteredHistory.length === 0 ? /*#__PURE__*/React.createElement("p", {style: {color: 'var(--gray3)', fontSize: '.9rem', textAlign: 'center', padding: 20}},
+    historySearch ? 'Sin resultados para "' + historySearch + '"' : 'Sin tickets cobrados hoy'
+  ) :
+    filteredHistory.map(function(h) {
+      var typeIcon = h.type === 'delivery' ? '\uD83D\uDEB4' : h.type === 'vehiculo' ? '\uD83D\uDE97' : '\uD83C\uDF7D\uFE0F';
+      var typeLabel = h.type === 'delivery' ? 'Delivery' : h.type === 'vehiculo' ? 'Veh\xEDculo' : 'Mesa ' + (h.tableNum || '');
+      var metIcon = h.paymentMethod === 'efectivo' ? '\uD83D\uDCB5' : h.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3' : h.paymentMethod === 'qr' ? '\uD83D\uDCF1' : h.paymentMethod === 'transferencia' ? '\uD83C\uDFE6' : h.paymentMethod === 'mixto' ? '\uD83D\uDD00' : '\uD83D\uDCB5';
+      var metLabel = h.paymentMethod === 'efectivo' ? 'Efectivo' : h.paymentMethod === 'tarjeta' ? 'Tarjeta' : h.paymentMethod === 'qr' ? 'QR' : h.paymentMethod === 'transferencia' ? 'Transferencia' : h.paymentMethod === 'mixto' ? 'Mixto' : h.paymentMethod || 'Efectivo';
+      var items = ensureArray(h.items);
+      return /*#__PURE__*/React.createElement("div", {key: h._key, className: "card", style: {padding: 12, marginBottom: 8, background: '#fafafa', border: '1px solid #e0e0e0'}},
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 6}},
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1rem'}}, "#", h.orderNum || '----'),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}},
+              typeIcon, " ", typeLabel, " \u2014 ", new Date(h.paidAt).toLocaleTimeString('es-PY', {hour:'2-digit', minute:'2-digit'})
+            )
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right'}},
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.05rem', color: 'var(--success)'}}, formatGs(h.total)),
+            /*#__PURE__*/React.createElement("span", {style: {padding: '2px 8px', background: h.paymentMethod === 'efectivo' ? '#e8f5e9' : h.paymentMethod === 'tarjeta' ? '#e3f2fd' : h.paymentMethod === 'qr' ? '#f3e5f5' : '#fff8e1', borderRadius: 6, fontSize: '.72rem', fontWeight: 700}}, metIcon, " ", metLabel)
+          )
+        ),
+        h.waiter && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--dark)', marginBottom: 4}}, "\uD83D\uDC64 Mozo: ", h.waiter, h.cashier ? ' | Cajera: ' + h.cashier : ''),
+        h.customerName && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--dark)', marginBottom: 4}}, "\uD83D\uDC64 Cliente: ", h.customerName, h.customerPhone ? ' (' + h.customerPhone + ')' : ''),
+        h.deliveryAddress && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--dark)', marginBottom: 4}}, "\uD83D\uDCCD ", h.deliveryAddress),
+        h.vehicleDesc && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--dark)', marginBottom: 4}}, "\uD83D\uDE97 ", h.vehicleDesc),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fff', borderRadius: 6, padding: 8, marginTop: 4}},
+          items.map(function(it, i) {
+            return /*#__PURE__*/React.createElement("div", {key: i, style: {display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '2px 0', borderBottom: i < items.length - 1 ? '1px solid #f0f0f0' : 'none'}},
+              /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, it.qty || 1, "x"), " ", it.name || ''),
+              /*#__PURE__*/React.createElement("span", {style: {fontWeight: 600, color: 'var(--gray3)'}}, formatGs((it.price || 0) * (it.qty || 1)))
+            );
+          })
+        ),
+        h.discount > 0 && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', padding: '4px 8px', color: '#c62828', marginTop: 4}},
+          /*#__PURE__*/React.createElement("span", null, "Descuento aplicado:"),
+          /*#__PURE__*/React.createElement("span", {style: {fontWeight: 700}}, "-", formatGs(h.discount))
+        ),
+        h.paymentMethod === 'mixto' && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)', marginTop: 4, padding: '4px 8px', background: '#f5f5f5', borderRadius: 4}},
+          "\uD83D\uDCB5 Efectivo: ", formatGs(h.mixEfectivo || 0), " | ", (h.mixOtroMetodo || 'tarjeta'), ": ", formatGs(h.mixOtro || 0)
+        )
+      );
+    }),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 12, position: 'sticky', bottom: 0, background: '#fff', padding: '10px 0'}},
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-primary", style: {flex: 1}, onClick: printDetailedHistory}, "\uD83D\uDDA8\uFE0F Imprimir Resumen"),
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {flex: 1}, onClick: function() { setShowDetailedHistory(false); setHistorySearch(''); }}, "Cerrar")
+  )))
   );
 }
 

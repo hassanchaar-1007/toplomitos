@@ -2211,7 +2211,7 @@ function AppMain({
     fbRemove('stock/' + id);
   }
   async function resetDay() {
-    askConfirm('¿Resetear el día? Se borran los pedidos de hoy, el historial del día, los turnos de caja y el contador vuelve a 0001.', async function() {
+    askConfirm('¿Resetear el día? Se borran los pedidos de hoy, el historial del día, los turnos de caja, asignaciones de mesas y el contador vuelve a 0001.', async function() {
       const dk = todayStr();
       const todayKeys = orders.filter(o => o.date === dk).map(o => o._key || o.id);
       const updates = {};
@@ -2227,7 +2227,12 @@ function AppMain({
       updates['ticketArchive/' + dk] = null;
       // Clear paid history for today
       updates['paidHistory/' + dk] = null;
+      // Clear today's mesa assignments (mozo on table)
+      updates['mesaAssignments/' + dk] = null;
+      // Clear QR pre-orders
+      updates['preOrders'] = null;
       await db.ref().update(updates);
+      showToast('Dia reseteado correctamente','success');
     });
   }
   async function resetGeneral() {
@@ -2238,7 +2243,14 @@ function AppMain({
         updates['counters'] = null;
         updates['listaCompras'] = null;
         updates['solicitudes'] = null;
+        updates['mesaAssignments'] = null;
+        updates['preOrders'] = null;
+        updates['cajaShifts'] = null;
+        updates['history'] = null;
+        updates['ticketArchive'] = null;
+        updates['paidHistory'] = null;
         await db.ref().update(updates);
+        showToast('Reset general completado','success');
       });
     });
   }

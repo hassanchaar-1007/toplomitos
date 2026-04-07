@@ -3905,6 +3905,12 @@ function CajaPage({
   const [historySearch, setHistorySearch] = useState('');
   const [showSearchOrders, setShowSearchOrders] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [refundOrder, setRefundOrder] = useState(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundNote, setRefundNote] = useState('');
+  const [courtesyReason, setCourtesyReason] = useState('');
+  const [courtesyNote, setCourtesyNote] = useState('');
+  const [courtesyMode, setCourtesyMode] = useState(false);
   const isAdmin = userRole === 'admin';
 
   // === TICKET ARCHIVE ===
@@ -3983,10 +3989,16 @@ function CajaPage({
 
   // Calculate shift-specific sales
   var myShiftSales = useMemo(function() {
-    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0};
-    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0};
+    if (!myOpenShift) return {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0, refunds: 0, refundCount: 0, courtesies: 0, courtesyCount: 0, refundList: [], courtesyList: []};
+    var result = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, discounts: 0, refunds: 0, refundCount: 0, courtesies: 0, courtesyCount: 0, refundList: [], courtesyList: []};
     paidToday.forEach(function(o) {
       if (o.paidAt && o.paidAt >= myOpenShift.startedAt) {
+        if (o.paymentMethod === 'cortesia') {
+          result.courtesies += (o.originalTotal || 0);
+          result.courtesyCount++;
+          result.courtesyList.push({orderNum: o.orderNum, amount: o.originalTotal || 0, reason: o.courtesyReason || 'Sin motivo', note: o.courtesyNote || ''});
+          return;
+        }
         result.total += (o.total || 0);
         result.count++;
         result.discounts += (o.discount || 0);
@@ -3998,8 +4010,21 @@ function CajaPage({
         }
       }
     });
+    // Refunds: look at orders with status 'refunded' in this shift
+    orders.forEach(function(o) {
+      if (o.status === 'refunded' && o.refundedAt && o.refundedAt >= myOpenShift.startedAt) {
+        var amt = o.refundAmount || 0;
+        result.refunds += amt;
+        result.refundCount++;
+        result.refundList.push({orderNum: o.orderNum, amount: amt, reason: o.refundReason || 'Sin motivo', note: o.refundNote || '', method: o.originalPaymentMethod || 'efectivo'});
+        // Subtract from facturation and from the original payment method
+        result.total -= amt;
+        var origMethod = o.originalPaymentMethod || 'efectivo';
+        if (result[origMethod] !== undefined) result[origMethod] -= amt;
+      }
+    });
     return result;
-  }, [paidToday, myOpenShift]);
+  }, [paidToday, myOpenShift, orders]);
 
   function closeShift() {
     if (!myOpenShift) return;
@@ -4014,7 +4039,13 @@ function CajaPage({
       salesTotal: myShiftSales.total,
       salesCount: myShiftSales.count,
       totalDiscounts: myShiftSales.discounts,
-      totalInjections: injectionsTotal
+      totalInjections: injectionsTotal,
+      totalRefunds: myShiftSales.refunds || 0,
+      refundCount: myShiftSales.refundCount || 0,
+      refundList: myShiftSales.refundList || [],
+      totalCourtesies: myShiftSales.courtesies || 0,
+      courtesyCount: myShiftSales.courtesyCount || 0,
+      courtesyList: myShiftSales.courtesyList || []
     });
     setShowCierreModal(false);
   }
@@ -4183,6 +4214,20 @@ function CajaPage({
       '<div class="r"><span>\uD83C\uDFE6 Transferencia:</span><span>' + formatGs(shift.salesTransferencia || 0) + '</span></div>' +
       ((shift.totalDiscounts || 0) > 0 ? '<div class="r" style="color:#c62828"><span>Descuentos aplicados:</span><span>-' + formatGs(shift.totalDiscounts) + '</span></div>' : '') +
       '<div class="r b big"><span>Total cobrado:</span><span>' + formatGs(shift.salesTotal || 0) + '</span></div>' +
+      ((shift.refundCount || 0) > 0 ? '<div class="ln"></div>' +
+        '<div class="b" style="color:#e65100">\u21A9 DEVOLUCIONES (' + shift.refundCount + ')</div>' +
+        ensureArray(shift.refundList).map(function(r) {
+          return '<div class="r"><span>#' + (r.orderNum || '----') + ' - ' + (r.reason || '') + '</span><span>-' + formatGs(r.amount || 0) + '</span></div>' +
+            (r.note ? '<div style="font-size:10px;color:#777;padding-left:8px">' + r.note + '</div>' : '');
+        }).join('') +
+        '<div class="r b" style="color:#e65100"><span>Total devuelto:</span><span>-' + formatGs(shift.totalRefunds || 0) + '</span></div>' : '') +
+      ((shift.courtesyCount || 0) > 0 ? '<div class="ln"></div>' +
+        '<div class="b" style="color:#c2185b">\uD83C\uDF81 CORTESIAS (' + shift.courtesyCount + ')</div>' +
+        ensureArray(shift.courtesyList).map(function(c) {
+          return '<div class="r"><span>#' + (c.orderNum || '----') + ' - ' + (c.reason || '') + '</span><span>' + formatGs(c.amount || 0) + '</span></div>' +
+            (c.note ? '<div style="font-size:10px;color:#777;padding-left:8px">' + c.note + '</div>' : '');
+        }).join('') +
+        '<div class="r b" style="color:#c2185b"><span>Valor total cortesias:</span><span>' + formatGs(shift.totalCourtesies || 0) + '</span></div>' : '') +
       '<div class="ln"></div>' +
       '<div class="b">EFECTIVO EN CAJA</div>' +
       '<div class="r"><span>Sencillo inicial:</span><span>' + formatGs(shift.openingFloat || 0) + '</span></div>' +
@@ -4205,7 +4250,7 @@ function CajaPage({
 
   function printReporteFinal() {
     var allClosed = closedShifts;
-    var totals = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, floats: 0, injections: 0, discounts: 0};
+    var totals = {efectivo: 0, tarjeta: 0, qr: 0, transferencia: 0, total: 0, count: 0, floats: 0, injections: 0, discounts: 0, refunds: 0, refundCount: 0, courtesies: 0, courtesyCount: 0};
     allClosed.forEach(function(s) {
       totals.efectivo += (s.salesEfectivo || 0);
       totals.tarjeta += (s.salesTarjeta || 0);
@@ -4216,6 +4261,10 @@ function CajaPage({
       totals.floats += (s.openingFloat || 0);
       totals.injections += (s.totalInjections || 0);
       totals.discounts += (s.totalDiscounts || 0);
+      totals.refunds += (s.totalRefunds || 0);
+      totals.refundCount += (s.refundCount || 0);
+      totals.courtesies += (s.totalCourtesies || 0);
+      totals.courtesyCount += (s.courtesyCount || 0);
     });
     var html = '<html><head><style>' + TICKET_STYLES + '</style></head><body><div class="ticket">' +
       '<div class="c b big">TOP LOMITOS</div><div class="c b">REPORTE FINAL DEL DIA</div>' +
@@ -4239,6 +4288,8 @@ function CajaPage({
       '<div class="r"><span>\uD83C\uDFE6 Total transferencia:</span><span>' + formatGs(totals.transferencia) + '</span></div>' +
       '<div class="ln"></div>' +
       (totals.discounts > 0 ? '<div class="r" style="color:#c62828"><span>Total descuentos:</span><span>-' + formatGs(totals.discounts) + '</span></div>' : '') +
+      (totals.refundCount > 0 ? '<div class="r" style="color:#e65100"><span>\u21A9 Devoluciones (' + totals.refundCount + '):</span><span>-' + formatGs(totals.refunds) + '</span></div>' : '') +
+      (totals.courtesyCount > 0 ? '<div class="r" style="color:#c2185b"><span>\uD83C\uDF81 Cortesias (' + totals.courtesyCount + '):</span><span>' + formatGs(totals.courtesies) + '</span></div>' : '') +
       '<div class="r b big"><span>FACTURACION TOTAL:</span><span>' + formatGs(totals.total) + '</span></div>' +
       '<div class="ln"></div>' +
       '<div class="r"><span>Sencillos entregados:</span><span>' + formatGs(totals.floats) + '</span></div>' +
@@ -4250,8 +4301,93 @@ function CajaPage({
     archiveTicket('reporte', 'REPORTE_FINAL', html, 'reporte_' + Date.now());
   }
 
+  function doRefund() {
+    if (!refundOrder) return;
+    if (!refundReason) { showToast('Debes seleccionar un motivo de devolucion','warn'); return; }
+    var now = Date.now();
+    var refundData = {
+      status: 'refunded',
+      refundedAt: now,
+      refundedBy: userName,
+      refundReason: refundReason,
+      refundNote: refundNote || '',
+      refundAmount: refundOrder.total || 0,
+      originalPaymentMethod: refundOrder.paymentMethod || 'efectivo'
+    };
+    onUpdateOrder(refundOrder.id, refundData);
+    // Store refund in paidHistory so it shows in detailed history too
+    var histKey = (refundOrder.orderNum || 'unknown') + '_refund_' + now;
+    fbSet('paidHistory/' + todayStr() + '/' + histKey, {
+      orderNum: refundOrder.orderNum || '----',
+      type: refundOrder.type || 'mesa',
+      items: ensureArray(refundOrder.items).map(function(it) { return {name: it.name, qty: it.qty, price: it.price || 0}; }),
+      total: -(refundOrder.total || 0),
+      paymentMethod: 'devolucion',
+      waiter: refundOrder.waiter || '',
+      customerName: refundOrder.clientName || '',
+      tableNum: refundOrder.tableNum || '',
+      vehicleDesc: refundOrder.vehicleDesc || '',
+      isRefund: true,
+      refundReason: refundReason,
+      refundNote: refundNote || '',
+      originalPaymentMethod: refundOrder.paymentMethod || 'efectivo',
+      paidAt: now,
+      cashier: userName
+    });
+    showToast('Devolucion registrada: ' + formatGs(refundOrder.total) + ' - ' + refundReason, 'success');
+    setRefundOrder(null);
+    setRefundReason('');
+    setRefundNote('');
+  }
+
   function cobrarConMetodo(order, metodo, mixData) {
     if (!myOpenShift) { showToast('Debes abrir tu caja primero para poder cobrar.','warn'); return; }
+    // Courtesy handling: mark as courtesy, zero total, record reason
+    if (metodo === 'cortesia') {
+      if (!courtesyReason) { showToast('Debes seleccionar un motivo de cortesia','warn'); return; }
+      var ctyNow = Date.now();
+      var ctyData = {
+        status: 'paid',
+        paymentMethod: 'cortesia',
+        paidAt: ctyNow,
+        total: 0,
+        originalTotal: order.total || 0,
+        courtesyReason: courtesyReason,
+        courtesyNote: courtesyNote || '',
+        courtesyBy: userName
+      };
+      if (order._groupOrders) {
+        order._groupOrders.forEach(function(o) { onUpdateOrder(o.id, Object.assign({}, ctyData)); });
+      } else {
+        onUpdateOrder(order.id, ctyData);
+      }
+      // Store in paidHistory
+      var ctyKey = (order.orderNum || 'unknown') + '_cty_' + ctyNow;
+      fbSet('paidHistory/' + todayStr() + '/' + ctyKey, {
+        orderNum: order.orderNum || '----',
+        type: order.type || 'mesa',
+        items: ensureArray(order.items).map(function(it) { return {name: it.name, qty: it.qty, price: it.price || 0}; }),
+        total: 0,
+        originalTotal: order.total || 0,
+        paymentMethod: 'cortesia',
+        waiter: order.waiter || '',
+        customerName: order.clientName || '',
+        tableNum: order.tableNum || '',
+        vehicleDesc: order.vehicleDesc || '',
+        isCourtesy: true,
+        courtesyReason: courtesyReason,
+        courtesyNote: courtesyNote || '',
+        paidAt: ctyNow,
+        cashier: userName
+      });
+      showToast('Cortesia registrada: ' + courtesyReason, 'success');
+      setPayingOrder(null);
+      setCourtesyMode(false);
+      setCourtesyReason('');
+      setCourtesyNote('');
+      setDiscountAmount('');
+      return;
+    }
     var disc = Number(discountAmount) || 0;
     var finalTotal = Math.max(0, (order.total || 0) - disc);
     var payData = {status: 'paid', paymentMethod: metodo, paidAt: Date.now(), total: finalTotal};
@@ -4751,13 +4887,19 @@ function CajaPage({
   }, o.paymentMethod === 'mixto' ? '\uD83D\uDD00 Mixto' : o.paymentMethod === 'tarjeta' ? '\uD83D\uDCB3 Tarjeta' : o.paymentMethod === 'qr' ? '\uD83D\uDCF1 QR' : o.paymentMethod === 'transferencia' ? '\uD83C\uDFE6 Transf.' : '\uD83D\uDCB5 Efectivo'), o.status === 'paid' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => setReceiptOrder(o)
-  }, "\uD83E\uDDFE Ver"), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
+  }, "\uD83E\uDDFE Ver"), o.status === 'paid' && o.paymentMethod !== 'cortesia' && myOpenShift && /*#__PURE__*/React.createElement("button", {
+    className: "btn btn-outline btn-sm",
+    style: {color: 'var(--warning)', fontWeight: 700},
+    onClick: () => { setRefundOrder(o); setRefundReason(''); setRefundNote(''); }
+  }, "\u21A9\uFE0F Devolver"), o.status === 'refunded' && /*#__PURE__*/React.createElement("span", {
+    style: {fontSize: '.7rem', color: 'var(--danger)', fontWeight: 700, padding: '3px 8px', background: 'rgba(239,68,68,.1)', borderRadius: 6}
+  }, "\u21A9\uFE0F Devuelto " + formatGs(o.refundAmount || 0)), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && o.status !== 'refunded' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     onClick: () => {
       setEditOrder(o);
       setEditNotes(o.notes || '');
     }
-  }, "\u270F\uFE0F"), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && /*#__PURE__*/React.createElement("button", {
+  }, "\u270F\uFE0F"), o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'dispatched' && o.status !== 'refunded' && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline btn-sm",
     style: {
       color: 'var(--danger)'
@@ -4993,7 +5135,7 @@ function CajaPage({
     onClick: () => setReceiptOrder(null)
   }, "Cerrar")))), payingOrder && /*#__PURE__*/React.createElement("div", {
     className: "modal-overlay",
-    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); }
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); setCourtesyMode(false); setCourtesyReason(''); setCourtesyNote(''); }
   }, /*#__PURE__*/React.createElement("div", {
     className: "modal",
     onClick: e => e.stopPropagation(),
@@ -5050,7 +5192,55 @@ function CajaPage({
         className: "btn btn-outline",
         style: {padding: '12px', fontSize: '.9rem', marginTop: 4, borderStyle: 'dashed'},
         onClick: function() { setMixMode(true); setMixEfectivo(''); }
-      }, "\uD83D\uDD00 Pago Mixto (Efectivo + Otro)")
+      }, "\uD83D\uDD00 Pago Mixto (Efectivo + Otro)"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-outline",
+        style: {padding: '12px', fontSize: '.9rem', marginTop: 4, borderStyle: 'dashed', color: '#c2185b', borderColor: '#c2185b'},
+        onClick: function() { setCourtesyMode(true); setCourtesyReason(''); setCourtesyNote(''); }
+      }, "\uD83C\uDF81 Cortes\xEDa (Gratis)")
+    )
+  ) : courtesyMode ? /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.9rem', fontWeight: 700, marginBottom: 10, color: '#c2185b'}}, "\uD83C\uDF81 Pedido de Cortes\xEDa"),
+    /*#__PURE__*/React.createElement("div", {style: {padding: '8px 12px', background: '#fce4ec', borderRadius: 8, marginBottom: 12, fontSize: '.82rem', textAlign: 'center'}},
+      "Valor original: ", /*#__PURE__*/React.createElement("b", null, formatGs(payingOrder.total)),
+      /*#__PURE__*/React.createElement("br", null),
+      "Se registrar\xE1 como cortes\xEDa (sin cobro)"
+    ),
+    /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+      /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "Motivo de cortes\xEDa:"),
+      /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6}},
+        ['Familiar','Regalo cliente','Degustaci\u00F3n','Compensaci\u00F3n','Promoci\u00F3n','Otro'].map(function(r) {
+          return /*#__PURE__*/React.createElement("button", {
+            key: r,
+            className: 'cat-btn ' + (courtesyReason === r ? 'active' : ''),
+            style: {fontSize: '.78rem', padding: '6px 10px'},
+            onClick: function() { setCourtesyReason(r); }
+          }, r);
+        })
+      )
+    ),
+    /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+      /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "Nota (opcional)"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        value: courtesyNote,
+        onChange: function(e) { setCourtesyNote(e.target.value); },
+        placeholder: "Ej: Cumplea\xF1os del cliente",
+        style: {width: '100%', padding: '8px 10px', border: '1px solid var(--gray)', borderRadius: 6, fontFamily: 'inherit', fontSize: '.9rem'}
+      })
+    ),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 10}},
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn btn-outline",
+        style: {flex: 1},
+        onClick: function() { setCourtesyMode(false); setCourtesyReason(''); setCourtesyNote(''); }
+      }, "\u2190 Volver"),
+      /*#__PURE__*/React.createElement("button", {
+        className: "btn",
+        style: {flex: 2, background: '#c2185b', color: '#fff', fontWeight: 700},
+        disabled: !courtesyReason,
+        onClick: function() { cobrarConMetodo(payingOrder, 'cortesia'); }
+      }, "\uD83C\uDF81 Confirmar Cortes\xEDa")
     )
   ) : /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("p", {style: {textAlign: 'center', fontSize: '.85rem', fontWeight: 700, marginBottom: 10}}, "\uD83D\uDD00 Pago Mixto"),
@@ -5106,8 +5296,63 @@ function CajaPage({
   !mixMode && /*#__PURE__*/React.createElement("button", {
     className: "btn btn-outline",
     style: {marginTop: 10, width: '100%'},
-    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); }
+    onClick: () => { setPayingOrder(null); setMixMode(false); setMixEfectivo(''); setDiscountAmount(''); setCourtesyMode(false); setCourtesyReason(''); setCourtesyNote(''); }
   }, "Cancelar"))),
+
+  /* === REFUND MODAL === */
+  refundOrder && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: function() { setRefundOrder(null); setRefundReason(''); setRefundNote(''); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: function(e) { e.stopPropagation(); },
+    style: {maxWidth: 420}
+  }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+  /*#__PURE__*/React.createElement("h3", {style: {textAlign: 'center', marginBottom: 4, color: 'var(--warning)'}}, "\u21A9\uFE0F Devolver Pedido"),
+  /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', marginBottom: 10}},
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.85rem'}}, "#", refundOrder.orderNum || '----', " \u2014 ", refundOrder.waiter || ''),
+    refundOrder.clientName && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)'}}, refundOrder.clientName),
+    refundOrder.vehicleDesc && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)'}}, "\uD83D\uDE97 ", refundOrder.vehicleDesc),
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1.3rem', marginTop: 4, color: 'var(--danger)'}}, "- ", formatGs(refundOrder.total || 0)),
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}}, "Se devolver\xE1 por: ", refundOrder.paymentMethod || 'efectivo')
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {borderBottom: '1px dashed #ccc', margin: '6px 0'}}),
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+    /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "Motivo de devoluci\xF3n:"),
+    /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6}},
+      ['Cliente enojado','Pedido tard\u00F3 mucho','Error del mozo','Producto no disponible','Cliente se fue','Equivocaci\u00F3n','Otro'].map(function(r) {
+        return /*#__PURE__*/React.createElement("button", {
+          key: r,
+          className: 'cat-btn ' + (refundReason === r ? 'active' : ''),
+          style: {fontSize: '.78rem', padding: '6px 10px'},
+          onClick: function() { setRefundReason(r); }
+        }, r);
+      })
+    )
+  ),
+  /*#__PURE__*/React.createElement("div", {className: "form-group", style: {marginBottom: 10}},
+    /*#__PURE__*/React.createElement("label", {style: {fontWeight: 600, fontSize: '.85rem'}}, "Nota (opcional)"),
+    /*#__PURE__*/React.createElement("textarea", {
+      value: refundNote,
+      onChange: function(e) { setRefundNote(e.target.value); },
+      placeholder: "Detalles de la devoluci\xF3n...",
+      rows: 2,
+      style: {width: '100%', padding: '8px 10px', border: '1px solid var(--gray)', borderRadius: 6, fontFamily: 'inherit', fontSize: '.9rem', resize: 'vertical'}
+    })
+  ),
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 8, marginTop: 10}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline",
+      style: {flex: 1},
+      onClick: function() { setRefundOrder(null); setRefundReason(''); setRefundNote(''); }
+    }, "Cancelar"),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn",
+      style: {flex: 2, background: 'var(--warning)', color: '#fff', fontWeight: 700},
+      disabled: !refundReason,
+      onClick: doRefund
+    }, "\u21A9\uFE0F Confirmar Devoluci\xF3n")
+  ))),
 
   /* === DISPATCH DELIVERY MODAL === */
   dispatchOrder && /*#__PURE__*/React.createElement("div", {
@@ -5375,7 +5620,21 @@ function CajaPage({
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83D\uDCF1 QR:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.qr))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uDFE6 Transferencia:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, formatGs(myShiftSales.transferencia))),
     myShiftSales.discounts > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', color:'#c62828'}}, /*#__PURE__*/React.createElement("span",null,"\uD83C\uFF8A Descuentos aplicados:"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, "-", formatGs(myShiftSales.discounts))),
+    (myShiftSales.refundCount || 0) > 0 && /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', color:'#e65100'}}, /*#__PURE__*/React.createElement("span",null,"\u21A9\uFE0F Devoluciones (", myShiftSales.refundCount, "):"), /*#__PURE__*/React.createElement("span",{style:{fontWeight:700}}, "-", formatGs(myShiftSales.refunds || 0))),
     /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'1rem', fontWeight:800, marginTop:6, paddingTop:6, borderTop:'1px solid #a5d6a7'}}, /*#__PURE__*/React.createElement("span",null,"Total cobrado:"), /*#__PURE__*/React.createElement("span",null, formatGs(myShiftSales.total)))
+  ),
+  (myShiftSales.courtesyCount || 0) > 0 && /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 10, marginBottom: 8, background: '#fce4ec', border: '1px solid #c2185b'}},
+    /*#__PURE__*/React.createElement("div", {style: {fontWeight: 700, marginBottom: 4, color: '#c2185b'}}, "\uD83C\uDF81 Cortes\xEDas del turno (", myShiftSales.courtesyCount, ")"),
+    ensureArray(myShiftSales.courtesyList).map(function(c, i) {
+      return /*#__PURE__*/React.createElement("div", {key: i, style: {display:'flex', justifyContent:'space-between', fontSize:'.78rem'}},
+        /*#__PURE__*/React.createElement("span", null, "#", c.orderNum, " - ", c.reason),
+        /*#__PURE__*/React.createElement("span", null, formatGs(c.amount))
+      );
+    }),
+    /*#__PURE__*/React.createElement("div", {style: {display:'flex', justifyContent:'space-between', fontSize:'.85rem', fontWeight:700, marginTop:4, paddingTop:4, borderTop:'1px dashed #c2185b'}},
+      /*#__PURE__*/React.createElement("span", null, "Valor cortesias:"),
+      /*#__PURE__*/React.createElement("span", null, formatGs(myShiftSales.courtesies || 0))
+    )
   ),
   /*#__PURE__*/React.createElement("div", {className: "card", style: {padding: 12, marginBottom: 8, background: '#fff3e0', border: '2px solid var(--warning)'}},
     /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, marginBottom: 4}}, "\uD83D\uDCB5 Efectivo en caja:"),
@@ -5418,7 +5677,7 @@ function CajaPage({
       onClick: function() {
         askConfirm('\xBFCerrar turno de ' + userName + '? Se generar\xE1 el reporte de cierre.', function() {
           closeShift();
-          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalDiscounts: myShiftSales.discounts, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0)}));
+          printCierreReport(Object.assign({}, myOpenShift, {closedAt: Date.now(), salesEfectivo: myShiftSales.efectivo, salesTarjeta: myShiftSales.tarjeta, salesQr: myShiftSales.qr, salesTransferencia: myShiftSales.transferencia, salesTotal: myShiftSales.total, salesCount: myShiftSales.count, totalDiscounts: myShiftSales.discounts, totalInjections: (myOpenShift.injections ? ensureArray(myOpenShift.injections).reduce(function(s,i){return s+(i.amount||0);},0) : 0), totalRefunds: myShiftSales.refunds || 0, refundCount: myShiftSales.refundCount || 0, refundList: myShiftSales.refundList || [], totalCourtesies: myShiftSales.courtesies || 0, courtesyCount: myShiftSales.courtesyCount || 0, courtesyList: myShiftSales.courtesyList || []}));
         });
       }
     }, "\uD83D\uDD12 Confirmar Cierre e Imprimir"),

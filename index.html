@@ -3195,7 +3195,8 @@ function PedidosPage({
     if (cart.length === 0) return;
     if (addingToOrder) {
       // Create a new ORDER with agregado instead of updating the old one
-      const parentOrderNum = addingToOrder.orderNum || '----';
+      // Always use the ROOT parent's orderNum so we never get A1-A1 nesting
+      const parentOrderNum = addingToOrder.parentOrderNum || addingToOrder.orderNum || '----';
       onAddOrder({
         type: addingToOrder.type,
         tableNum: addingToOrder.tableNum,

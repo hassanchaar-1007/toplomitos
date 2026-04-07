@@ -2026,6 +2026,8 @@ function AppMain({
   async function sendPreOrderToKitchen(po, editedItems, editedObs) {
     var items = editedItems || ensureArray(po.items);
     var total = items.reduce(function(s, i) { return s + (i.price || 0) * (i.qty || 1); }, 0);
+    // Assign mozo to this mesa FIRST so it appears immediately in the layout
+    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
     await addOrder({
       type: 'mesa',
       tableNum: String(po.mesa),
@@ -2034,9 +2036,8 @@ function AppMain({
       waiter: user.name,
       observations: editedObs || po.customerNote || ''
     });
-    // Mark as confirmed with mozo name (client will see this), assign mozo, remove notification
+    // Mark as confirmed with mozo name (client will see this), remove notification
     fbUpdate('preOrders/' + po._key, {status: 'confirmed', confirmedBy: user.name, confirmedAt: Date.now()});
-    fbUpdate('mesaAssignments/' + dateKey + '/' + po.mesa, {mozo: user.name, assignedAt: Date.now()});
     setNotifications(function(n) { return n.filter(function(x) { return x.preOrderKey !== po._key; }); });
     setPendingPreOrder(null);
     setPoEditItems([]);
@@ -2901,10 +2902,17 @@ function MesaStatusPanel({ activeOrders, mesaAssignments, todayCalls }) {
   var mesas = [];
   for (var i = 1; i <= TOTAL_MESAS; i++) {
     var num = String(i);
-    var hasOrder = activeOrders.some(function(o) { return o.type === 'mesa' && String(o.tableNum) === num && o.status !== 'paid'; });
+    // Find the most recent order for this mesa to get its waiter directly
+    var mesaOrders = activeOrders.filter(function(o) { return o.type === 'mesa' && String(o.tableNum) === num && o.status !== 'paid'; });
+    var hasOrder = mesaOrders.length > 0;
     var assignment = mesaAssignments[num];
+    // Prefer waiter from the actual order (most reliable). Fallback to mesaAssignment.
+    var orderWaiter = mesaOrders.length > 0 ? (mesaOrders.sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0);})[0].waiter || null) : null;
+    var displayMozo = orderWaiter || (assignment ? assignment.mozo : null);
     var isCalling = todayCalls && todayCalls.some(function(c) { return String(c.mesa) === num; });
-    mesas.push({ num: i, occupied: hasOrder, mozo: hasOrder && assignment ? assignment.mozo : null, calling: isCalling });
+    // Show mesa as occupied if has order OR has assignment (mozo accepted QR pre-order but not yet sent to kitchen)
+    var occupied = hasOrder || !!(assignment && assignment.mozo);
+    mesas.push({ num: i, occupied: occupied, mozo: displayMozo, calling: isCalling });
   }
   var occupiedCount = mesas.filter(function(m) { return m.occupied; }).length;
   return /*#__PURE__*/React.createElement("div", {className: "mesa-panel"},
@@ -3895,6 +3903,8 @@ function CajaPage({
   const [showTicketArchive, setShowTicketArchive] = useState(false);
   const [showDetailedHistory, setShowDetailedHistory] = useState(false);
   const [historySearch, setHistorySearch] = useState('');
+  const [showSearchOrders, setShowSearchOrders] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const isAdmin = userRole === 'admin';
 
   // === TICKET ARCHIVE ===
@@ -4443,8 +4453,13 @@ function CajaPage({
     /*#__PURE__*/React.createElement("span", {style: {padding: '3px 8px', background: '#fff', borderRadius: 6, fontWeight: 700}}, "Ventas turno: ", formatGs(myShiftSales.total), " (", myShiftSales.count, " ped.)")
   )),
 
-  /* === REPORTE FINAL + HISTORIAL DETALLADO === */
-  (closedShifts.length > 0 || paidHistoryList.length > 0) && /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap'}},
+  /* === REPORTE FINAL + HISTORIAL DETALLADO + BUSCAR === */
+  /*#__PURE__*/React.createElement("div", {style: {display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap'}},
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn btn-outline btn-sm",
+      style: {fontSize: '.78rem', borderColor: '#6a1b9a', color: '#6a1b9a'},
+      onClick: function() { setShowSearchOrders(true); }
+    }, "\uD83D\uDD0D Buscar Pedido"),
     closedShifts.length > 0 && /*#__PURE__*/React.createElement("button", {
       className: "btn btn-outline btn-sm",
       style: {fontSize: '.78rem'},
@@ -5478,6 +5493,93 @@ function CajaPage({
     }),
   /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {width: '100%', marginTop: 10}, onClick: function() { setShowTicketArchive(false); }}, "Cerrar")
   )),
+
+  /* === BUSCAR PEDIDO MODAL === */
+  showSearchOrders && (function() {
+    var q = (searchQuery || '').trim().toLowerCase();
+    var allOrdersToday = orders.filter(function(o) { return o && o.date === todayStr(); });
+    var matches = q ? allOrdersToday.filter(function(o) {
+      return (String(o.orderNum || '').toLowerCase().includes(q)) ||
+             (String(o.tableNum || '').toLowerCase() === q) ||
+             (String(o.tableNum || '').toLowerCase().includes(q)) ||
+             (o.waiter && o.waiter.toLowerCase().includes(q)) ||
+             (o.vehicleDesc && o.vehicleDesc.toLowerCase().includes(q)) ||
+             (o.clientName && o.clientName.toLowerCase().includes(q)) ||
+             (o.clientPhone && o.clientPhone.toLowerCase().includes(q)) ||
+             (o.clientAddress && o.clientAddress.toLowerCase().includes(q)) ||
+             (o.notes && o.notes.toLowerCase().includes(q)) ||
+             (o.observations && o.observations.toLowerCase().includes(q)) ||
+             ensureArray(o.items).some(function(it) { return it.name && it.name.toLowerCase().includes(q); });
+    }).sort(function(a,b) { return (b.createdAt || 0) - (a.createdAt || 0); }) : [];
+    return /*#__PURE__*/React.createElement("div", {
+      className: "modal-overlay",
+      onClick: function() { setShowSearchOrders(false); setSearchQuery(''); }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "modal",
+      onClick: function(e) { e.stopPropagation(); },
+      style: {maxWidth: 550, maxHeight: '90vh', overflow: 'auto'}
+    }, /*#__PURE__*/React.createElement("div", {className: "modal-handle"}),
+    /*#__PURE__*/React.createElement("h3", null, "\uD83D\uDD0D Buscar Pedido"),
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)', marginBottom: 8}},
+      "Buscar por #ticket, mesa, mozo, chapa, color, marca, cliente, item..."
+    ),
+    /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      value: searchQuery,
+      onChange: function(e) { setSearchQuery(e.target.value); },
+      placeholder: "Ej: 0042, mesa 5, juan, ABC123, rojo...",
+      autoFocus: true,
+      style: {width: '100%', padding: '12px 14px', border: '2px solid #6a1b9a', borderRadius: 10, fontSize: '1rem', marginBottom: 10, boxSizing: 'border-box'}
+    }),
+    /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', color: 'var(--gray3)', marginBottom: 10}},
+      q ? matches.length + ' resultado' + (matches.length !== 1 ? 's' : '') : 'Escrib\u00ED para empezar a buscar'
+    ),
+    matches.length === 0 && q ? /*#__PURE__*/React.createElement("div", {style: {textAlign: 'center', padding: 30, color: 'var(--gray3)'}},
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: '2rem', marginBottom: 8}}, "\uD83D\uDD0E"),
+      /*#__PURE__*/React.createElement("div", null, "Sin resultados para \"", q, "\"")
+    ) : null,
+    matches.map(function(o) {
+      var statusBadge = o.status === 'paid' ? {bg: '#e8f5e9', color: '#2e7d32', label: '\u2705 Cobrado'} :
+                        o.status === 'cancelled' ? {bg: '#ffebee', color: '#c62828', label: '\u274C Cancelado'} :
+                        o.status === 'ready' ? {bg: '#e3f2fd', color: '#1565c0', label: '\u2705 Listo'} :
+                        o.status === 'preparing' ? {bg: '#fff3e0', color: '#e65100', label: '\uD83D\uDD25 Preparando'} :
+                        o.status === 'served' ? {bg: '#f3e5f5', color: '#6a1b9a', label: '\uD83C\uDF7D\uFE0F Servido'} :
+                        o.status === 'dispatched' ? {bg: '#fff8e1', color: '#f57f17', label: '\uD83D\uDEB4 Enviado'} :
+                        {bg: '#f5f5f5', color: '#616161', label: '\u23F3 Pendiente'};
+      var typeIcon = o.type === 'delivery' ? '\uD83D\uDEB4' : o.type === 'vehiculo' ? '\uD83D\uDE97' : '\uD83C\uDF7D\uFE0F';
+      var typeLabel = o.type === 'delivery' ? 'Delivery' : o.type === 'vehiculo' ? 'Veh\xEDculo' : 'Mesa ' + (o.tableNum || '');
+      return /*#__PURE__*/React.createElement("div", {key: o._key || o.id, className: "card", style: {padding: 12, marginBottom: 8, background: '#fafafa', border: '1px solid #e0e0e0'}},
+        /*#__PURE__*/React.createElement("div", {style: {display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 6}},
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1rem'}}, "#", o.orderNum || '----'),
+            /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', color: 'var(--gray3)'}},
+              typeIcon, " ", typeLabel,
+              o.createdAt ? ' \u2014 ' + new Date(o.createdAt).toLocaleTimeString('es-PY', {hour:'2-digit', minute:'2-digit'}) : ''
+            )
+          ),
+          /*#__PURE__*/React.createElement("div", {style: {textAlign: 'right'}},
+            /*#__PURE__*/React.createElement("div", {style: {fontWeight: 800, fontSize: '1rem'}}, formatGs(o.total || 0)),
+            /*#__PURE__*/React.createElement("span", {style: {padding: '2px 8px', background: statusBadge.bg, color: statusBadge.color, borderRadius: 6, fontSize: '.7rem', fontWeight: 700}}, statusBadge.label)
+          )
+        ),
+        o.waiter && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', marginBottom: 3}}, "\uD83D\uDC64 Mozo: ", /*#__PURE__*/React.createElement("strong", null, o.waiter)),
+        o.clientName && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', marginBottom: 3}}, "\uD83D\uDC64 Cliente: ", o.clientName, o.clientPhone ? ' \u2014 ' + o.clientPhone : ''),
+        o.clientAddress && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', marginBottom: 3}}, "\uD83D\uDCCD ", o.clientAddress),
+        o.vehicleDesc && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.78rem', marginBottom: 3, padding: '3px 6px', background: '#fff3cd', borderRadius: 4, display: 'inline-block'}}, "\uD83D\uDE97 ", o.vehicleDesc),
+        /*#__PURE__*/React.createElement("div", {style: {background: '#fff', borderRadius: 6, padding: 8, marginTop: 4, fontSize: '.8rem'}},
+          ensureArray(o.items).map(function(it, i) {
+            return /*#__PURE__*/React.createElement("div", {key: i, style: {display: 'flex', justifyContent: 'space-between', padding: '2px 0'}},
+              /*#__PURE__*/React.createElement("span", null, /*#__PURE__*/React.createElement("strong", null, (it.qty || 1) + 'x '), it.name),
+              /*#__PURE__*/React.createElement("span", {style: {color: 'var(--gray3)'}}, formatGs((it.price || 0) * (it.qty || 1)))
+            );
+          })
+        ),
+        (o.notes || o.observations) && /*#__PURE__*/React.createElement("div", {style: {fontSize: '.75rem', marginTop: 6, padding: '5px 8px', background: '#fffde7', borderRadius: 4, fontStyle: 'italic'}}, "\uD83D\uDCDD ", o.notes || o.observations)
+      );
+    }),
+    /*#__PURE__*/React.createElement("button", {className: "btn btn-outline", style: {width: '100%', marginTop: 12, position: 'sticky', bottom: 0}, onClick: function() { setShowSearchOrders(false); setSearchQuery(''); }}, "Cerrar")
+    ));
+  })(),
 
   /* === HISTORIAL DETALLADO MODAL === */
   showDetailedHistory && /*#__PURE__*/React.createElement("div", {
